@@ -364,6 +364,47 @@ def _retrieve_relevant_context_impl(
         return f"Error retrieving context for '{query}': {str(exc)}"
 
 
+def _retrieve_hybrid_context_impl(
+    query: str,
+    top_k: int = 3,
+    workspace_root: str = ".",
+    max_context_chars: int = 4000,
+) -> str:
+    """Phase 11 implementation of semantic + lexical + metadata hybrid code retrieval."""
+    if not query or not query.strip():
+        return "Error: Retrieval query cannot be empty."
+
+    try:
+        from app.retrieval import HybridCodeIndex
+
+        index = HybridCodeIndex(workspace_root=workspace_root)
+        results = index.search(query=query, top_k=top_k, max_context_chars=max_context_chars)
+
+        if not results:
+            return f"No relevant code context found for query: '{query}'"
+
+        sections = [f"=== Retrieved Hybrid Context for Query: '{query}' ==="]
+        for rank, res in enumerate(results, start=1):
+            c = res.chunk
+            symbol_str = f" ({c.symbol_type}: {c.symbol_name})" if c.symbol_name else ""
+            header = (
+                f"\n--- Rank {rank} | File: {c.file_path} (L{c.start_line}-L{c.end_line}){symbol_str} ---\n"
+                f"Scores: Final={res.final_score:.3f} (Lexical={res.lexical_score:.3f}, "
+                f"Semantic={res.semantic_score:.3f}, Metadata={res.metadata_score:.3f})"
+            )
+            sections.append(header)
+            sections.append(c.content)
+
+        output = "\n".join(sections)
+        if len(output) > max_context_chars:
+            output = output[:max_context_chars] + f"\n... (context output truncated at {max_context_chars} characters)"
+
+        return output
+    except Exception as exc:
+        return f"Error performing hybrid context retrieval: {str(exc)}"
+
+
+
 # -----------------------------------------------------------------------------
 # Phase 5 Safe Code Modification Implementations
 # -----------------------------------------------------------------------------
@@ -843,6 +884,20 @@ def create_pull_request(title: str, body: str, head_branch: str, base_branch: st
     )
 
 
+@tool
+def retrieve_hybrid_context(query: str, top_k: int = 3) -> str:
+    """Perform hybrid semantic, lexical, and metadata code retrieval across repository chunks.
+
+    Args:
+        query: Goal or search query describing code functionality or symbols to retrieve.
+        top_k: Maximum number of relevant code chunks to return (defaults to 3).
+
+    Returns:
+        Structured observation block containing ranked code chunks and score breakdown.
+    """
+    return _retrieve_hybrid_context_impl(query=query, top_k=top_k, workspace_root=".")
+
+
 def create_workspace_tools(workspace_root: str = "."):
     """Create repository inspection, retrieval, code modification, validation, planning, and delivery tools bound to workspace root.
 
@@ -1070,6 +1125,21 @@ def create_workspace_tools(workspace_root: str = "."):
             workspace_root=workspace_root,
         )
 
+    @tool
+    def retrieve_hybrid_context(query: str, top_k: int = 3) -> str:
+        """Perform hybrid semantic, lexical, and metadata code retrieval across repository chunks.
+
+        Args:
+            query: Goal or search query describing code functionality or symbols to retrieve.
+            top_k: Maximum number of relevant code chunks to return (defaults to 3).
+
+        Returns:
+            Structured observation block containing ranked code chunks and score breakdown.
+        """
+        return _retrieve_hybrid_context_impl(
+            query=query, top_k=top_k, workspace_root=workspace_root
+        )
+
     return [
         list_files,
         read_file,
@@ -1077,6 +1147,7 @@ def create_workspace_tools(workspace_root: str = "."):
         git_status,
         git_diff,
         retrieve_relevant_context,
+        retrieve_hybrid_context,
         write_file,
         replace_in_file,
         run_tests,

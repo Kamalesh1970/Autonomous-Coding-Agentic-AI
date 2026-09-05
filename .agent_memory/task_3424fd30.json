@@ -1,0 +1,58 @@
+{
+  "version": "1.0",
+  "task_id": "task_3424fd30",
+  "user_goal": "Locate verify_jwt auth implementation",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-18/test_agent_uses_retrieval_for_0",
+  "status": "paused",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": null,
+  "retry_count": 0,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": null,
+  "commit_created": false,
+  "push_requested": false,
+  "pr_requested": false,
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Locate verify_jwt auth implementation"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Retrieving hybrid code context for auth task.",
+      "tool_calls": [
+        {
+          "name": "retrieve_hybrid_context",
+          "args": {
+            "query": "verify_jwt auth token",
+            "top_k": 2
+          },
+          "id": "c1",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "=== Retrieved Hybrid Context for Query: 'verify_jwt auth token' ===\n\n--- Rank 1 | File: auth_jwt.py (L1-L1) (function: verify_jwt) ---\nScores: Final=0.722 (Lexical=0.508, Semantic=0.838, Metadata=1.000)\ndef verify_jwt(): return True",
+      "tool_call_id": "c1",
+      "name": "retrieve_hybrid_context"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Observed auth_jwt.py context. Task complete.",
+      "tool_calls": []
+    }
+  ]
+}

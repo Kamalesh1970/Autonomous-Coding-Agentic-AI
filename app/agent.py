@@ -35,7 +35,7 @@ SYSTEM_PROMPT = (
     "and safe Git/GitHub delivery tools.\n\n"
     "When given a software engineering goal or bug fix task:\n"
     "1. Decompose goals into structured subtasks using `create_plan` with explicit dependencies.\n"
-    "2. Use `retrieve_relevant_context(query)` or `read_file(file_path)` to locate relevant code context.\n"
+    "2. Use `retrieve_hybrid_context(query)`, `retrieve_relevant_context(query)`, or `read_file(file_path)` to locate relevant code context.\n"
     "3. Apply code modifications using `replace_in_file(file_path, old_text, new_text)` or `write_file`.\n"
     "4. Inspect repository changes with `git_diff()` or `git_status()`.\n"
     "5. IMPERATIVE VALIDATION & SELF-CORRECTION LOOP:\n"

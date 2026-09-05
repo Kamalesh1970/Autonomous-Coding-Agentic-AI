@@ -1,4 +1,4 @@
-# Autonomous Coding Agentic AI (Phase 10: Safe Git/GitHub Delivery & Human Approval)
+# Autonomous Coding Agentic AI (Phase 11: Advanced Code Retrieval / RAG)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
@@ -6,115 +6,73 @@ Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/o
 
 ---
 
-## 🎯 What is Phase 10?
+## 🎯 What is Phase 11?
 
-Phase 10 equips the agent with **Safe Git/GitHub Delivery and Human-in-the-Loop Approval** capabilities (`git_status`, `git_diff`, `git_current_branch`, `git_create_branch`, `request_human_approval`, `git_commit`, `git_push`, `create_pull_request`).
+Phase 11 equips the agent with **Advanced Code Retrieval / RAG** capabilities (`retrieve_hybrid_context`), integrating repository-aware code chunking, vector embeddings, hybrid ranking, local index lifecycle caching, and retrieval benchmarking.
 
-The agentic lifecycle for Phase 10 is:
+The agentic retrieval workflow is:
 
-$$\text{VERIFIED CODE CHANGES} \longrightarrow \text{INSPECT GIT STATE} \longrightarrow \text{PREPARE DELIVERY} \longrightarrow \text{REQUEST HUMAN APPROVAL} \longrightarrow \text{[ HUMAN APPROVAL DECISION ]} \longrightarrow \text{EXECUTE APPROVED GIT ACTION}$$
-
----
-
-## 🚦 Human-in-the-Loop Approval Model
-
-The agent is prohibited from blindly executing externally impactful delivery actions:
-
-1. **Actions Requiring Explicit Approval**: `git commit`, `git push`, `create_pull_request`.
-2. **Read-Only / Safe Local Actions**: `git_status`, `git_diff`, `git_current_branch`, `git_create_branch` (read-only and safe local feature branch creation run autonomously).
-3. **Approval States**:
-   - `not_required`: Read-only / inspection operations.
-   - `pending`: Delivery action requested; waiting for human decision.
-   - `approved`: Human operator approved action (`approve_task`); agent proceeds with commit/push/PR.
-   - `rejected`: Human operator rejected action (`approve_task`); delivery action is cancelled without modifying Git history.
-4. **State Persistence**: Approval status (`pending`, `approved`, `rejected`) is persisted to disk and survives task pause/resume.
+$$\text{USER GOAL / SUBTASK} \longrightarrow \text{CODE CHUNKING} \longrightarrow \text{EMBEDDINGS} \longrightarrow \text{HYBRID RANKING (Lexical + Semantic + Metadata)} \longrightarrow \text{CONTEXT BUDGET BOUNDING} \longrightarrow \text{AGENT REASONING}$$
 
 ---
 
-## 🛡️ Security & Git Boundary Controls (`app/sandbox.py`)
+## 🔍 Hybrid Retrieval Architecture (`app/retrieval.py`)
 
-- ❌ Destructive Git commands (`git reset --hard`, `git clean -fd`, `git push --force`) are strictly **prohibited**.
-- ❌ Branch name injection (names starting with `-` or containing illegal shell characters) is blocked.
-- ❌ Overwriting existing Git branches is prevented.
-- ❌ Empty commits without staged changes are rejected.
-- ❌ Credentials and secret tokens (`GITHUB_TOKEN`, `OPENAI_API_KEY`) are stripped/redacted from command outputs.
+1. **Repository-Aware Code Chunking**:
+   - Parses Python files into AST function/class definitions and structured line/block sections with metadata (`file_path`, `start_line`, `end_line`, `content`, `language`, `symbol_name`, `symbol_type`).
+   - Automatically excludes secrets (`.env`, `*.pem`, `*.key`, `id_rsa`, `credentials*`, `secrets*`) and binary files.
 
----
+2. **Embeddings & In-Memory Vector Index**:
+   - `BaseEmbeddingModel` interface supporting deterministic local `MockEmbeddingModel` (for 100% offline, zero-API-key testing) and optional `OpenAIEmbeddingModel` (`text-embedding-3-small`).
+   - `HybridCodeIndex`: In-memory index with automatic `mtime` file modification tracking to reuse cached index when files are unchanged and refresh automatically when code changes.
 
-## 🔒 Security Threat Model
+3. **Hybrid Ranking Formula**:
+   $$\text{Final Score} = (\text{Lexical Score} \times 0.4) + (\text{Semantic Score} \times 0.5) + (\text{Metadata Score} \times 0.1)$$
+   - **Lexical Score**: BM25 / term frequency match across query terms and code content.
+   - **Semantic Score**: Cosine similarity between query embedding vector and chunk vector.
+   - **Metadata Score**: Boosts matches on symbol names (function/class) and file paths.
 
-| Threat Scenario | Sandbox & Delivery Protection |
-| :--- | :--- |
-| **LLM attempts unapproved commit or push** | Tool checks `approval_status`; blocks operation unless explicitly `approved`. |
-| **Human rejects delivery request** | `approval_status = "rejected"` cancels operation and halts execution cleanly. |
-| **Branch name injection (`-b_malicious` or `; rm`)** | `validate_branch_name` rejects invalid characters and flags. |
-| **Destructive Git commands (`git reset --hard`)** | `is_command_allowed` rejects destructive commands before execution. |
-| **Secrets leak into Git commits or push logs** | Subprocess environment isolation & token redaction mask credentials. |
+4. **Context Budget Bounding**:
+   - Bounded by `top_k`, `max_context_chars`, and `max_chunk_chars` to return concise, high-value repository context without blowing up the LLM context window.
 
----
-
-## ⚠️ Known Limitations
-
-- **Local Subprocess Isolation**: Uses local subprocess execution and environment sanitization (not equivalent to VM/Docker).
-- **GitHub Mocking**: Remote push and PR creation operate safely offline with token redaction for test environments.
-- **Academic Prototype**: Designed as an academic software engineering prototype.
-
+5. **Retrieval Evaluation & Benchmarks**:
+   - `RetrievalEvaluator` measures Precision@K, Recall@K, and MRR (Mean Reciprocal Rank) to compare **Lexical**, **Semantic**, and **Hybrid** retrieval modes across benchmark tasks.
 
 ---
 
-## 🤖 Why Agentic (Not a Single-Pass Code Generator)?
+## 🚦 Human-in-the-Loop Approval & Delivery Model (Phase 10)
 
-A simple LLM tool merely generates code once.
-
-This agentic AI operates in an **environmental feedback loop**:
-```
-User Goal (or Resumed Task ID)
-   │
-   ▼
-[ Plan & Retrieve Context ]
-   │
-   ▼
-[ Safety Check ] ───► (Rejects unsafe paths or commands)
-   │
-   ▼
-[ Modify Repository Code ] (write_file / replace_in_file inside sandbox)
-   │
-   ▼
-[ Checkpoint State to Disk ] (atomic save to .agent_memory/<task_id>.json)
-   │
-   ▼
-[ Run Automated Tests ] (run_tests: pytest in sandbox) ───► (Validation)
-   │
-   ├────────► [ PASS ] ───► [ Inspect Repository Evidence ]
-   │                              │
-   │                              ▼
-   │                      [ Verify Goal ] (verify_goal: passed / failed / uncertain)
-   │                              │
-   │                              ├────────► [ PASSED ] ───► [ Complete Goal ]
-   │                              │
-   ▼ (FAIL Traceback)             ▼ (FAILED / UNCERTAIN Evidence)
-[ Diagnose Error & Retrieve ] ────┴────► [ Apply Fix & Recovery ] ───► (RETRY loop)
-```
+- **Actions Requiring Explicit Approval**: `git commit`, `git push`, `create_pull_request`.
+- **Read-Only / Safe Local Actions**: `git_status`, `git_diff`, `git_current_branch`, `git_create_branch`, `retrieve_hybrid_context`.
 
 ---
 
-## 🛠️ Tool & Sandbox Layer
+## 🛡️ Security & Sandbox Controls (`app/sandbox.py`)
 
-All tools enforce strict repository boundary and sandbox isolation:
+- ❌ Workspace boundary enforced (file traversal outside sandbox root blocked).
+- ❌ Secrets (`.env`, `*.pem`, `*.key`, `id_rsa`, `credentials*`, `secrets*`) excluded from chunking and retrieval.
+- ❌ Destructive Git commands (`git reset --hard`, `git clean -fd`, `git push --force`) prohibited.
+- ❌ Credentials redacted from output logs.
 
-1. `list_files(directory=".")`: Recursively lists relative file paths in workspace.
-2. `read_file(file_path)`: Reads text file content inside sandbox with byte limits and binary file detection.
-3. `search_code(query, directory=".")`: Plain-text search returning `file:line: snippet` matches.
-4. `git_status()`: Inspects repository Git branch, modified files, and untracked files.
-5. `git_diff()`: Inspects current unstaged and staged Git differences for edit feedback.
-6. `retrieve_relevant_context(query, directory=".")`: Ranks relevant files and returns surrounding code context snippets.
-7. `write_file(file_path, content)`: Safely creates or overwrites repository files inside sandbox.
-8. `replace_in_file(file_path, old_text, new_text)`: Targeted unique text replacement inside sandbox.
-9. `run_tests(target_directory=".", timeout_seconds=30)`: Controlled pytest execution in sandbox minimal environment.
-10. `verify_goal(status, summary, evidence)`: Evaluates whether original user goal is satisfied based on repository evidence.
-11. `create_plan(tasks)`: Decomposes goal into structured subtasks with dependencies.
-12. `update_task_status(task_id, status, notes)`: Updates task status.
-13. `revise_plan(new_tasks, reason)`: Dynamically modifies remaining tasks based on new findings.
+---
+
+## 🛠️ Agent Toolset
+
+1. `retrieve_hybrid_context(query, top_k=3)`: Retrieves ranked hybrid semantic + lexical + metadata code context chunks.
+2. `list_files(directory=".")`: Recursively lists relative file paths in workspace.
+3. `read_file(file_path)`: Reads text file content inside sandbox with byte limits and binary file detection.
+4. `search_code(query, directory=".")`: Plain-text search returning `file:line: snippet` matches.
+5. `git_status()`: Inspects repository Git branch, modified files, and untracked files.
+6. `git_diff()`: Inspects current unstaged and staged Git differences for edit feedback.
+7. `retrieve_relevant_context(query, directory=".")`: Phase 4 context retrieval snippet builder.
+8. `write_file(file_path, content)`: Safely creates or overwrites repository files inside sandbox.
+9. `replace_in_file(file_path, old_text, new_text)`: Targeted unique text replacement inside sandbox.
+10. `run_tests(target_directory=".", timeout_seconds=30)`: Controlled pytest execution in sandbox minimal environment.
+11. `verify_goal(status, summary, evidence)`: Evaluates whether original user goal is satisfied based on repository evidence.
+12. `request_human_approval(action, reason, risk)`: Requests human approval for commit/push/PR delivery actions.
+13. `git_commit(message, files)`: Performs approved Git commit.
+14. `git_push(remote, branch)`: Performs approved Git push.
+15. `create_pull_request(title, body, head_branch, base_branch)`: Creates pull request representation.
 
 ---
 
@@ -136,7 +94,7 @@ pip install -r requirements.txt
 
 ## 🧪 Running Tests
 
-The test suite is 100% deterministic and runs offline using mocked model responses and temporary sandbox/Git fixtures (`pytest`):
+The test suite is 100% deterministic and runs offline using mock model responses and temporary sandbox/Git fixtures (`pytest`):
 
 ```bash
 pytest -v
@@ -156,16 +114,3 @@ Run a new task:
 ```bash
 python3 -m app.agent "Fix the multiply function so that the project's tests pass." .
 ```
-
----
-
-## 🚧 Intentionally NOT Implemented (Reserved for Future Phases)
-
-To keep Phase 9 strictly focused on secure sandbox & execution isolation, the following components are intentionally omitted:
-
-- ❌ Mandatory Docker / VM dependencies (optional container sandbox backend left uncoupled)
-- ❌ Human-in-the-loop approval mechanism (reserved for Phase 10)
-- ❌ GitHub API / branch creation / commits / pushes / PRs
-- ❌ Vector databases / RAG / Qdrant / Pinecone / Chroma
-- ❌ Multi-agent systems / MCP / Observability platforms
-
