@@ -1,0 +1,24 @@
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE / Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.vscode/
+.idea/
+
+# Environment files with secrets
+.env
+
+# Temporary scratch directories
+workspace_scratch/
