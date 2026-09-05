@@ -48,8 +48,7 @@ class MockLLM(BaseChatModel):
     bound_tools: Optional[List[Any]] = None
 
     def __init__(self, responses: List[AIMessage]):
-        super().__init__()
-        object.__setattr__(self, "responses", list(responses))
+        super().__init__(responses=list(responses))
         object.__setattr__(self, "bound_tools", None)
 
     @property
