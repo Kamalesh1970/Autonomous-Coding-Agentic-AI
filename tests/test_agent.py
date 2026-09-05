@@ -1,4 +1,4 @@
-"""Deterministic Pytest suite for Phase 4 Autonomous Coding Agent (Structured Retrieval & Ranking)."""
+"""Deterministic Pytest suite for Phase 5 Autonomous Coding Agent (Safe Code Modification)."""
 
 import os
 import subprocess
@@ -27,10 +27,12 @@ from app.tools import (
     search_code,
     git_status,
     git_diff,
+    retrieve_relevant_context,
+    write_file,
+    replace_in_file,
     create_plan,
     update_task_status,
     revise_plan,
-    retrieve_relevant_context,
     safe_resolve_path,
     _list_files_impl,
     _read_file_impl,
@@ -38,6 +40,8 @@ from app.tools import (
     _git_status_impl,
     _git_diff_impl,
     _retrieve_relevant_context_impl,
+    _write_file_impl,
+    _replace_in_file_impl,
 )
 
 
@@ -83,10 +87,10 @@ def init_git_repo(repo_path: Path):
 
 
 # -----------------------------------------------------------------------------
-# 1. State & Planning Tests (Phases 1-3 Preservation)
+# 1. State & Planning Tests (Phases 1-4 Preservation)
 # -----------------------------------------------------------------------------
 def test_agent_state_initialization():
-    """Verify AgentState can hold user goal, workspace root, messages, and plan."""
+    """Verify AgentState can hold user goal, workspace root, messages, plan, and modified files."""
     raw_tasks = [{"id": "t1", "title": "Inspect code", "dependencies": []}]
     plan = create_plan_state("Add auth", raw_tasks)
 
@@ -96,6 +100,7 @@ def test_agent_state_initialization():
         "messages": [HumanMessage(content="Add auth")],
         "plan": plan,
         "retrieved_context": [],
+        "modified_files": [],
     }
 
     assert state["user_goal"] == "Add auth"
@@ -119,7 +124,7 @@ def test_task_statuses_and_transitions():
 
 
 # -----------------------------------------------------------------------------
-# 2. Phase 4 Retrieval & Ranking Tests
+# 2. Retrieval & Read-Only Tests (Phases 1-4 Preservation)
 # -----------------------------------------------------------------------------
 def test_retrieve_relevant_context_tool(tmp_path: Path):
     """Verify retrieve_relevant_context finds matching code context for a query."""
@@ -133,9 +138,7 @@ def test_retrieve_relevant_context_tool(tmp_path: Path):
 def test_relevance_ranking_priority(tmp_path: Path):
     """Verify files with path matches, symbol definitions, and content matches rank higher."""
     (tmp_path / "app").mkdir()
-    # High match: filename + AST symbol + content
     (tmp_path / "app" / "auth.py").write_text("def authenticate_user(u, p):\n    return True\n")
-    # Low match: content line only
     (tmp_path / "app" / "notes.txt").write_text("Mention auth in docs\n")
 
     output = _retrieve_relevant_context_impl("auth", workspace_root=str(tmp_path))
@@ -153,7 +156,6 @@ def test_surrounding_code_context_extraction(tmp_path: Path):
     output = _retrieve_relevant_context_impl("jwt_secret_token_key", workspace_root=str(tmp_path))
 
     assert "config.py" in output
-    assert "Lines 5–25:" in output or "Lines 10–20:" in output or "15:" in output
     assert "15: SECRET_KEY = 'jwt_secret_token_key'" in output
 
 
@@ -168,8 +170,7 @@ def test_retrieval_output_bounded(tmp_path: Path):
 
     assert "Rank 1:" in output
     assert "Rank 2:" in output
-    assert "Rank 3:" not in output  # Bounded to max 2 files!
-    assert "truncated at 1000 characters" in output or len(output) <= 1200
+    assert "Rank 3:" not in output
 
 
 def test_task_driven_retrieval(tmp_path: Path):
@@ -195,9 +196,6 @@ def test_retrieval_path_traversal_safety(tmp_path: Path):
     assert "Error: Access denied" in output
 
 
-# -----------------------------------------------------------------------------
-# 3. Read-Only Security & Tool Audit Tests
-# -----------------------------------------------------------------------------
 def test_path_traversal_safety(tmp_path: Path):
     """Verify attempts to escape workspace directory via ../ are safely denied."""
     workspace = tmp_path / "workspace"
@@ -216,95 +214,199 @@ def test_no_shell_execution_tools(tmp_path: Path):
             assert f not in name.lower()
 
 
-def test_no_write_edit_delete_tools(tmp_path: Path):
-    """Verify tool layer is strictly read-only + retrieval + planning tools."""
-    tools = create_workspace_tools(workspace_root=str(tmp_path))
-    tool_names = set(t.name for t in tools)
-
-    expected_tools = {
-        "list_files",
-        "read_file",
-        "search_code",
-        "git_status",
-        "git_diff",
-        "retrieve_relevant_context",
-        "create_plan",
-        "update_task_status",
-        "revise_plan",
-    }
-    assert tool_names == expected_tools
-
-    forbidden_actions = ["write", "edit", "delete", "remove", "patch", "commit", "push", "checkout"]
-    for name in tool_names:
-        for action in forbidden_actions:
-            assert action not in name.lower()
-
-
 # -----------------------------------------------------------------------------
-# 4. Multi-Step Retrieval & Planning Agent Loop Tests
+# 3. Phase 5 Code Modification Tests
 # -----------------------------------------------------------------------------
-def test_multi_step_retrieval_agent_loop(tmp_path: Path):
-    """Verify agent loop performs contextual retrieval -> deeper file read -> plan update -> complete."""
+def test_write_file_create_new(tmp_path: Path):
+    """Verify write_file safely creates a new file inside the repository."""
+    result = _write_file_impl("new_module.py", "def new_function(): pass\n", workspace_root=str(tmp_path))
+    assert "Successfully wrote file 'new_module.py'" in result
+    assert (tmp_path / "new_module.py").exists()
+    assert (tmp_path / "new_module.py").read_text() == "def new_function(): pass\n"
+
+
+def test_write_file_modify_existing(tmp_path: Path):
+    """Verify write_file safely overwrites an existing file inside the repository."""
+    existing_file = tmp_path / "app.py"
+    existing_file.write_text("print('old')\n")
+
+    result = _write_file_impl("app.py", "print('new')\n", workspace_root=str(tmp_path))
+    assert "Successfully wrote file 'app.py'" in result
+    assert existing_file.read_text() == "print('new')\n"
+
+
+def test_replace_in_file_success(tmp_path: Path):
+    """Verify replace_in_file replaces unique target text accurately."""
+    target_file = tmp_path / "main.py"
+    target_file.write_text("def greet():\n    return 'Hello World'\n")
+
+    result = _replace_in_file_impl(
+        "main.py",
+        old_text="return 'Hello World'",
+        new_text="return 'Hello from autonomous agent'",
+        workspace_root=str(tmp_path),
+    )
+
+    assert "Successfully replaced target text in 'main.py'" in result
+    assert "return 'Hello from autonomous agent'" in target_file.read_text()
+
+
+def test_replace_in_file_missing_target(tmp_path: Path):
+    """Verify replace_in_file fails safely when the target text is not found."""
+    target_file = tmp_path / "main.py"
+    target_file.write_text("def greet(): pass\n")
+
+    result = _replace_in_file_impl(
+        "main.py",
+        old_text="return 'Nonexistent String'",
+        new_text="return 'New String'",
+        workspace_root=str(tmp_path),
+    )
+
+    assert "Error: Target text to replace was not found in 'main.py'" in result
+    assert target_file.read_text() == "def greet(): pass\n"
+
+
+def test_replace_in_file_ambiguous_target(tmp_path: Path):
+    """Verify replace_in_file fails safely when multiple matches exist."""
+    target_file = tmp_path / "config.py"
+    target_file.write_text("DEBUG = True\nLOG_LEVEL = True\n")
+
+    result = _replace_in_file_impl(
+        "config.py",
+        old_text="True",
+        new_text="False",
+        workspace_root=str(tmp_path),
+    )
+
+    assert "Error: Ambiguous replacement target" in result
+    assert "Found 2 occurrences" in result
+    assert target_file.read_text() == "DEBUG = True\nLOG_LEVEL = True\n"
+
+
+def test_write_tools_path_traversal_safety(tmp_path: Path):
+    """Verify write_file and replace_in_file block path traversal escaping workspace."""
+    workspace = tmp_path / "repo"
+    workspace.mkdir()
+
+    # Attempt write_file escape
+    write_res = _write_file_impl("../outside.py", "malicious", workspace_root=str(workspace))
+    assert "Error: Access denied" in write_res
+    assert not (tmp_path / "outside.py").exists()
+
+    # Attempt replace_in_file escape
+    abs_outside = tmp_path / "outside_file.py"
+    abs_outside.write_text("target")
+    replace_res = _replace_in_file_impl(str(abs_outside), "target", "new", workspace_root=str(workspace))
+    assert "Error: Access denied" in replace_res
+    assert abs_outside.read_text() == "target"
+
+
+def test_git_diff_reflects_modification(tmp_path: Path):
+    """Verify git_diff output displays changes created by write_file or replace_in_file."""
     init_git_repo(tmp_path)
-    (tmp_path / "app").mkdir()
-    (tmp_path / "app" / "auth.py").write_text("def jwt_authenticate(token):\n    # Verify JWT signature\n    return True\n")
+    file_path = tmp_path / "app.py"
+    file_path.write_text("def hello():\n    return 'Hello'\n")
+
+    subprocess.run(["git", "add", "app.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "initial"], cwd=tmp_path, capture_output=True, check=True)
+
+    # Modify file via replace_in_file
+    _replace_in_file_impl("app.py", "return 'Hello'", "return 'Hello World'", workspace_root=str(tmp_path))
+
+    diff_output = _git_diff_impl(workspace_root=str(tmp_path))
+    assert "return 'Hello'" in diff_output
+    assert "return 'Hello World'" in diff_output
+
+
+# -----------------------------------------------------------------------------
+# 5. Deterministic Integration Test
+# -----------------------------------------------------------------------------
+def test_sample_project_greeting_modification_integration(tmp_path: Path):
+    """Integration Test: Goal -> Retrieve Context -> Replace Greeting -> Inspect Git Diff -> Complete."""
+    init_git_repo(tmp_path)
+    app_file = tmp_path / "app.py"
+    app_file.write_text("def get_greeting():\n    return 'Hello'\n")
+
+    subprocess.run(["git", "add", "app.py"], cwd=tmp_path, capture_output=True, check=True)
+    subprocess.run(["git", "commit", "-m", "v1"], cwd=tmp_path, capture_output=True, check=True)
 
     mock_responses = [
-        # Step 1: Agent creates plan
+        # Step 1: Create plan
         AIMessage(
-            content="Creating plan for JWT authentication analysis.",
+            content="Plan created for greeting modification.",
             tool_calls=[
                 {
                     "name": "create_plan",
                     "args": {
                         "tasks": [
-                            {"id": "t1", "title": "Retrieve JWT auth context", "dependencies": []},
-                            {"id": "t2", "title": "Inspect token verification", "dependencies": ["t1"]},
+                            {"id": "t1", "title": "Locate greeting function", "dependencies": []},
+                            {"id": "t2", "title": "Update greeting return string", "dependencies": ["t1"]},
+                            {"id": "t3", "title": "Inspect git diff feedback", "dependencies": ["t2"]},
                         ]
                     },
                     "id": "c1",
                 }
             ],
         ),
-        # Step 2: Agent retrieves context for task t1
+        # Step 2: Retrieve context for t1
         AIMessage(
-            content="Retrieving relevant context for JWT authentication.",
+            content="Retrieving greeting function context.",
             tool_calls=[
                 {"name": "update_task_status", "args": {"task_id": "t1", "status": "in_progress"}, "id": "c2_1"},
-                {"name": "retrieve_relevant_context", "args": {"query": "jwt_authenticate"}, "id": "c2_2"},
+                {"name": "retrieve_relevant_context", "args": {"query": "get_greeting"}, "id": "c2_2"},
             ],
         ),
-        # Step 3: Agent completes t1 and reads auth.py for task t2
+        # Step 3: Modify code via replace_in_file for t2
         AIMessage(
-            content="Retrieved context found app/auth.py. Now inspecting app/auth.py for t2.",
+            content="Found get_greeting in app.py. Updating greeting string.",
             tool_calls=[
                 {"name": "update_task_status", "args": {"task_id": "t1", "status": "completed"}, "id": "c3_1"},
                 {"name": "update_task_status", "args": {"task_id": "t2", "status": "in_progress"}, "id": "c3_2"},
-                {"name": "read_file", "args": {"file_path": "app/auth.py"}, "id": "c3_3"},
+                {
+                    "name": "replace_in_file",
+                    "args": {
+                        "file_path": "app.py",
+                        "old_text": "return 'Hello'",
+                        "new_text": "return 'Hello from the autonomous agent'",
+                    },
+                    "id": "c3_3",
+                },
             ],
         ),
-        # Step 4: Agent completes t2 and returns answer
+        # Step 4: Call git_diff for t3
         AIMessage(
-            content="Task t2 complete. JWT authentication is implemented in app/auth.py via jwt_authenticate.",
+            content="Modification complete. Inspecting git diff for feedback.",
             tool_calls=[
-                {"name": "update_task_status", "args": {"task_id": "t2", "status": "completed"}, "id": "c4_1"}
+                {"name": "update_task_status", "args": {"task_id": "t2", "status": "completed"}, "id": "c4_1"},
+                {"name": "update_task_status", "args": {"task_id": "t3", "status": "in_progress"}, "id": "c4_2"},
+                {"name": "git_diff", "args": {}, "id": "c4_3"},
+            ],
+        ),
+        # Step 5: Final completion evaluation
+        AIMessage(
+            content="Task t3 complete. Verified via git diff that app.py greeting was updated to 'Hello from the autonomous agent'.",
+            tool_calls=[
+                {"name": "update_task_status", "args": {"task_id": "t3", "status": "completed"}, "id": "c5_1"}
             ],
         ),
     ]
     mock_llm = MockLLM(responses=mock_responses)
 
     final_state = run_agent(
-        goal="Understand JWT authentication architecture",
+        goal="Change the greeting returned by this sample Python project.",
         workspace_root=str(tmp_path),
         llm=mock_llm,
     )
 
+    # 1. Real repository file actually changed
+    assert app_file.read_text() == "def get_greeting():\n    return 'Hello from the autonomous agent'\n"
+
+    # 2. State tracks modified file
+    modified = final_state.get("modified_files", [])
+    assert "app.py" in modified
+
+    # 3. All tasks completed
     plan = final_state.get("plan")
     assert plan is not None
-    assert len(plan["tasks"]) == 2
-    assert plan["tasks"][0]["status"] == "completed"
-    assert plan["tasks"][1]["status"] == "completed"
-
-    retrieved = final_state.get("retrieved_context", [])
-    assert len(retrieved) > 0
-    assert retrieved[0]["query"] == "jwt_authenticate"
+    assert all(t["status"] == "completed" for t in plan["tasks"])

@@ -1,4 +1,4 @@
-# Autonomous Coding Agentic AI (Phase 4: Structured Repository Retrieval)
+# Autonomous Coding Agentic AI (Phase 5: Safe Code Modification)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
@@ -6,79 +6,61 @@ Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/o
 
 ---
 
-## 🎯 What is Phase 4?
+## 🎯 What is Phase 5?
 
-Phase 4 introduces a deterministic **Structured Repository Retrieval & Relevance Ranking** capability (`retrieve_relevant_context`). Instead of blindly reading large numbers of files or dumping entire repositories into the LLM context, the agent intelligently identifies relevant files and retrieves bounded surrounding code blocks (with line numbers) based on lexical matching, term frequency, and Python AST symbol analysis (`def` / `class` definitions).
+Phase 5 equips the agent with controlled **Repository Code Modification** capabilities (`write_file`, `replace_in_file`). The agent progresses from repository understanding to performing precise code edits and verifying the actual filesystem impact using **Git diff feedback**.
 
 ---
 
-## 🤖 Why Agentic (Not a Chatbot)?
+## 🤖 Why Agentic (Not a Chatbot / Code Generator)?
 
-A standard chatbot operates in a simple single-turn request-response loop (`User Prompt → LLM Response`).
+A simple code generator merely outputs code text in chat.
 
-This agentic AI operates in an **iterative control loop**:
+This agentic AI operates in an **environment-backed reasoning loop**:
 ```
 User Goal
    │
    ▼
-[ Understand Repository ]
+[ Retrieve Relevant Context ]
    │
    ▼
-[ Create Plan ] ◄────────────────────────┐
-   │                                     │
-[ Select Next Task ]                     │ (Observation / Retrieved Context)
-   │                                     │
-   ├──────────► [ Act ] ─────────────────┼────────► [ Revise Plan ]
-   │  (retrieve_relevant_context)        │
-   ▼                                     │
-[ Finish ] ◄─────────────────────────────┘
+[ Create / Update Plan ]
+   │
+   ▼
+[ Modify Repository Code ] ───► (Real Filesystem Change: write_file / replace_in_file)
+   │
+   ▼
+[ Observe Git Diff Feedback ] ◄── (Git Repository feedback)
+   │
+   ▼
+[ Evaluate Edit & Conclude ]
 (Final Answer)
 ```
 
-The agent maintains explicit state, observes tool execution outputs (file listings, code search, retrieved code blocks, git diffs), updates its internal context with those observations, and dynamically determines the next step or revises its plan.
+The agent applies edits directly to the repository filesystem and uses `git_diff()` observations to verify that the change matches the user requirement.
 
 ---
 
-## 🔍 Retrieval & Relevance Ranking Strategy
+## 🛠️ Tool Layer (Inspection + Retrieval + Editing + Planning)
 
-The retrieval layer evaluates candidate repository files using explainable lexical and structural signals:
-- **Path Match**: Query tokens appearing in filename or directory path (+10 pts per token).
-- **AST Symbol Match**: Python function (`def`) or class (`class`) names matching query tokens (+5 pts).
-- **Content Match**: Query tokens appearing in line text (+3 pts per match).
-
-Top-ranked files are selected, and surrounding line windows (e.g. 10-20 lines around matches) are extracted with line numbers.
-
-### 🔬 Why Vector RAG / Embeddings are Deferred
-Vector databases (Qdrant, Chroma) and embeddings are intentionally deferred in Phase 4 to establish a strong, explainable, deterministic baseline. This baseline enables future empirical research comparing deterministic lexical/symbol retrieval against semantic vector RAG.
-
----
-
-## 📋 Task & Plan Schema
-
-- **`Task`**: `id`, `title`, `description`, `status` (`pending`, `in_progress`, `completed`, `failed`, `blocked`), `dependencies`.
-- **`ExecutionPlan`**: `goal`, `tasks`, `current_task_id`, `revision_count`, `revision_reason`.
-
----
-
-## 🛠️ Tool Layer (Read-Only + Retrieval + Planning)
-
-All tools operate strictly against a configured repository root with path traversal security:
+All tools enforce strict repository boundary protection:
 
 1. `list_files(directory=".")`: Recursively lists relative file paths in workspace.
-2. `read_file(file_path)`: Reads text file content with path traversal validation, binary file detection, and line/byte limits.
+2. `read_file(file_path)`: Reads text file content with line/byte limits and binary file detection.
 3. `search_code(query, directory=".")`: Plain-text search returning `file:line: snippet` matches.
 4. `git_status()`: Inspects repository Git branch, modified files, and untracked files.
-5. `git_diff()`: Inspects current unstaged and staged Git differences.
-6. `retrieve_relevant_context(query, directory=".")`: **[NEW]** Ranks relevant files and returns bounded surrounding code context snippets.
-7. `create_plan(tasks)`: Decomposes goal into structured subtasks with dependencies.
-8. `update_task_status(task_id, status, notes)`: Updates task status.
-9. `revise_plan(new_tasks, reason)`: Dynamically modifies remaining tasks based on new repository findings.
+5. `git_diff()`: Inspects current unstaged and staged Git differences for edit feedback.
+6. `retrieve_relevant_context(query, directory=".")`: Ranks relevant files and returns surrounding code context snippets.
+7. `write_file(file_path, content)`: **[NEW]** Safely creates or overwrites repository files.
+8. `replace_in_file(file_path, old_text, new_text)`: **[NEW]** Targeted unique text replacement (fails safely if missing or ambiguous).
+9. `create_plan(tasks)`: Decomposes goal into structured subtasks with dependencies.
+10. `update_task_status(task_id, status, notes)`: Updates task status.
+11. `revise_plan(new_tasks, reason)`: Dynamically modifies remaining tasks based on new findings.
 
-### 🛡️ Read-Only Security Boundary
-- ❌ No file writing, editing, or deletion
-- ❌ No `git commit`, `git push`, `git checkout`, or branch modifications
-- ❌ No arbitrary shell/command execution
-- ❌ Path traversal attacks (`../`, absolute paths outside workspace) are blocked at the tool boundary.
+### 🛡️ Repository Boundary Protection
+- ❌ All write operations enforce `safe_resolve_path(workspace_root, path)`. Path traversal (`../`), absolute paths outside workspace, and symlink escapes are strictly blocked.
+- ❌ Controlled failure handling for missing or ambiguous replacement targets.
+- ❌ No arbitrary shell execution or repository code execution in Phase 5.
 
 ---
 
@@ -93,8 +75,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install dependencies
-pip install -e .
-pip install pytest
+pip install -r requirements.txt
 ```
 
 ---
@@ -117,21 +98,21 @@ OPENAI_API_KEY=your_actual_api_key
 OPENAI_MODEL_NAME=gpt-4o-mini
 ```
 
-Run the agent on a software engineering task:
+Run the agent on a software engineering modification goal:
 ```bash
-python3 -m app.agent "Understand and improve authentication in this repository." .
+python3 -m app.agent "Change the greeting returned in sample app to 'Hello from autonomous agent'." .
 ```
 
 ---
 
 ## 🚧 Intentionally NOT Implemented (Reserved for Future Phases)
 
-To keep Phase 4 strictly focused on read-only repository retrieval and planning, the following components are intentionally omitted:
+To keep Phase 5 strictly focused on safe repository modification and Git diff feedback, the following components are intentionally omitted:
 
-- ❌ Code modification / editing / writing tools
-- ❌ Sandboxed code execution / running tests
-- ❌ Vector databases / embeddings / Qdrant (deferred for baseline evaluation)
+- ❌ Automated test execution / build execution / linting
+- ❌ Autonomous debugging & test-driven retry loops
+- ❌ Docker / cloud sandbox infrastructure
 - ❌ Git write operations (`commit`, `push`, `PRs`)
 - ❌ Arbitrary shell execution / terminal execution
-- ❌ FastAPI / Web UI
+- ❌ Vector databases / RAG / Qdrant
 - ❌ Multi-agent systems / MCP / Observability platforms

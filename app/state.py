@@ -51,12 +51,14 @@ class AgentState(TypedDict, total=False):
         workspace_root: Base directory path constraining file tool execution for safety.
         plan: Optional ExecutionPlan structured object tracking task decomposition and progress.
         retrieved_context: Optional list of retrieved code context snippets and query metadata.
+        modified_files: Optional list of repository file paths modified by code writing tools.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     user_goal: str
     workspace_root: str
     plan: ExecutionPlan | None
     retrieved_context: list[dict] | None
+    modified_files: list[str] | None
 
 
 def create_plan_state(goal: str, raw_tasks: list[dict]) -> ExecutionPlan:

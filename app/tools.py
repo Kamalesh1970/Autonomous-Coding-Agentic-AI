@@ -1,4 +1,4 @@
-"""Minimal safe read-only repository, planning, and retrieval tools for Phase 4 Autonomous Coding Agent."""
+"""Minimal safe read-only and code modification tools for Phase 5 Autonomous Coding Agent."""
 
 import ast
 import os
@@ -313,7 +313,6 @@ def _retrieve_relevant_context_impl(
                         content_score += 3.0 * matches_in_line
                         match_indices.append(idx)
 
-                # Python AST Symbol Definition Matching
                 symbol_score = 0.0
                 if file_path.suffix == ".py":
                     try:
@@ -343,7 +342,6 @@ def _retrieve_relevant_context_impl(
         if not scored_files:
             return f"No relevant code context found for query: '{query}'"
 
-        # Sort descending by relevance score
         scored_files.sort(key=lambda x: x["score"], reverse=True)
         top_files = scored_files[:max_files]
 
@@ -356,7 +354,6 @@ def _retrieve_relevant_context_impl(
             total_lines = len(lines)
             matches = item["matches"]
 
-            # Merge overlapping surrounding line windows
             windows = []
             for m in matches:
                 start = max(1, m - context_window_lines)
@@ -394,6 +391,61 @@ def _retrieve_relevant_context_impl(
 
     except Exception as exc:
         return f"Error retrieving context for '{query}': {str(exc)}"
+
+
+# -----------------------------------------------------------------------------
+# Phase 5 Safe Code Modification Implementations
+# -----------------------------------------------------------------------------
+def _write_file_impl(file_path: str, content: str, workspace_root: str = ".") -> str:
+    """Safe writing/creation of repository files with workspace root boundary protection."""
+    try:
+        resolved_file = safe_resolve_path(workspace_root, file_path)
+    except ValueError as err:
+        return f"Error: {err}"
+
+    try:
+        resolved_file.parent.mkdir(parents=True, exist_ok=True)
+        resolved_file.write_text(content, encoding="utf-8")
+        byte_len = len(content.encode("utf-8"))
+        return f"Successfully wrote file '{file_path}' ({byte_len} bytes)."
+    except Exception as exc:
+        return f"Error writing file '{file_path}': {str(exc)}"
+
+
+def _replace_in_file_impl(file_path: str, old_text: str, new_text: str, workspace_root: str = ".") -> str:
+    """Targeted unique text replacement inside repository files with safety checks."""
+    try:
+        resolved_file = safe_resolve_path(workspace_root, file_path)
+    except ValueError as err:
+        return f"Error: {err}"
+
+    if not resolved_file.exists():
+        return f"Error: File '{file_path}' does not exist."
+
+    if not resolved_file.is_file():
+        return f"Error: Path '{file_path}' is a directory, not a file."
+
+    if _is_binary_file(resolved_file):
+        return f"Error: File '{file_path}' appears to be binary and cannot be edited as text."
+
+    try:
+        content = resolved_file.read_text(encoding="utf-8", errors="replace")
+
+        if old_text not in content:
+            return f"Error: Target text to replace was not found in '{file_path}'."
+
+        count = content.count(old_text)
+        if count > 1:
+            return (
+                f"Error: Ambiguous replacement target. Found {count} occurrences of target text "
+                f"in '{file_path}'. Please provide more unique surrounding context."
+            )
+
+        new_content = content.replace(old_text, new_text, 1)
+        resolved_file.write_text(new_content, encoding="utf-8")
+        return f"Successfully replaced target text in '{file_path}'."
+    except Exception as exc:
+        return f"Error editing file '{file_path}': {str(exc)}"
 
 
 # -----------------------------------------------------------------------------
@@ -474,6 +526,40 @@ def retrieve_relevant_context(query: str, directory: str = ".") -> str:
 
 
 # -----------------------------------------------------------------------------
+# Standalone Code Modification Tools
+# -----------------------------------------------------------------------------
+@tool
+def write_file(file_path: str, content: str) -> str:
+    """Safely create or overwrite a repository file with text content.
+
+    Args:
+        file_path: Relative path of the file inside workspace to write.
+        content: Text content to write to the file.
+
+    Returns:
+        Confirmation observation string or error message.
+    """
+    return _write_file_impl(file_path=file_path, content=content, workspace_root=".")
+
+
+@tool
+def replace_in_file(file_path: str, old_text: str, new_text: str) -> str:
+    """Perform targeted unique text replacement in an existing repository file.
+
+    Args:
+        file_path: Relative path of the file inside workspace to modify.
+        old_text: Exact unique target text snippet to replace.
+        new_text: Replacement text snippet.
+
+    Returns:
+        Confirmation observation string or error message (if text missing or ambiguous).
+    """
+    return _replace_in_file_impl(
+        file_path=file_path, old_text=old_text, new_text=new_text, workspace_root="."
+    )
+
+
+# -----------------------------------------------------------------------------
 # Standalone Planning Tools
 # -----------------------------------------------------------------------------
 @tool
@@ -538,7 +624,7 @@ def revise_plan(new_tasks: list[dict], reason: str) -> str:
 
 
 def create_workspace_tools(workspace_root: str = "."):
-    """Create read-only repository tools, retrieval tool, and planning tools bound to workspace root.
+    """Create repository inspection, retrieval, code modification, and planning tools bound to workspace root.
 
     Args:
         workspace_root: Path to the root workspace directory.
@@ -617,6 +703,35 @@ def create_workspace_tools(workspace_root: str = "."):
             query=query, directory=directory, workspace_root=workspace_root
         )
 
+    @tool
+    def write_file(file_path: str, content: str) -> str:
+        """Safely create or overwrite a repository file with text content.
+
+        Args:
+            file_path: Relative path of the file inside workspace to write.
+            content: Text content to write to the file.
+
+        Returns:
+            Confirmation observation string or error message.
+        """
+        return _write_file_impl(file_path=file_path, content=content, workspace_root=workspace_root)
+
+    @tool
+    def replace_in_file(file_path: str, old_text: str, new_text: str) -> str:
+        """Perform targeted unique text replacement in an existing repository file.
+
+        Args:
+            file_path: Relative path of the file inside workspace to modify.
+            old_text: Exact unique target text snippet to replace.
+            new_text: Replacement text snippet.
+
+        Returns:
+            Confirmation observation string or error message (if text missing or ambiguous).
+        """
+        return _replace_in_file_impl(
+            file_path=file_path, old_text=old_text, new_text=new_text, workspace_root=workspace_root
+        )
+
     return [
         list_files,
         read_file,
@@ -624,6 +739,8 @@ def create_workspace_tools(workspace_root: str = "."):
         git_status,
         git_diff,
         retrieve_relevant_context,
+        write_file,
+        replace_in_file,
         create_plan,
         update_task_status,
         revise_plan,
