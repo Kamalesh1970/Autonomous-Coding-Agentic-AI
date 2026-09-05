@@ -5,6 +5,7 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph.message import add_messages
 
 TaskStatus = Literal["pending", "in_progress", "completed", "failed", "blocked"]
+ValidationStatus = Literal["passed", "failed", "timeout", "error"]
 
 
 class Task(TypedDict, total=False):
@@ -41,6 +42,21 @@ class ExecutionPlan(TypedDict, total=False):
     revision_reason: str | None
 
 
+class ValidationResult(TypedDict, total=False):
+    """Structured representation of test validation output.
+
+    Attributes:
+        status: Status of the test execution (passed, failed, timeout, error).
+        exit_code: Process exit code (0 for pass, 1+ for fail, None for timeout/error).
+        summary: Concise text summary of the test run.
+        output: Bounded stdout/stderr traceback context.
+    """
+    status: ValidationStatus
+    exit_code: int | None
+    summary: str
+    output: str
+
+
 class AgentState(TypedDict, total=False):
     """Explicit state representation for the autonomous coding agent.
 
@@ -52,6 +68,9 @@ class AgentState(TypedDict, total=False):
         plan: Optional ExecutionPlan structured object tracking task decomposition and progress.
         retrieved_context: Optional list of retrieved code context snippets and query metadata.
         modified_files: Optional list of repository file paths modified by code writing tools.
+        validation_result: Optional ValidationResult tracking test execution output.
+        retry_count: Number of recovery/retry attempts performed.
+        max_retries: Maximum permitted recovery attempts before escalation.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     user_goal: str
@@ -59,6 +78,9 @@ class AgentState(TypedDict, total=False):
     plan: ExecutionPlan | None
     retrieved_context: list[dict] | None
     modified_files: list[str] | None
+    validation_result: ValidationResult | None
+    retry_count: int
+    max_retries: int
 
 
 def create_plan_state(goal: str, raw_tasks: list[dict]) -> ExecutionPlan:

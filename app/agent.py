@@ -1,4 +1,4 @@
-"""LangGraph Agent Loop for Phase 5 Code Modification Agent."""
+"""LangGraph Agent Loop for Phase 6 Autonomous Testing, Recovery & Retry Agent."""
 
 import os
 import sys
@@ -16,24 +16,26 @@ from app.state import (
     create_plan_state,
     update_task_state,
     revise_plan_state,
+    ValidationResult,
 )
 from app.tools import create_workspace_tools
 
 
 SYSTEM_PROMPT = (
     "You are an autonomous software engineering assistant equipped with repository inspection, "
-    "structured context retrieval, dynamic planning, and safe code editing tools.\n\n"
-    "When given a software engineering goal:\n"
-    "1. Decompose complex goals into structured subtasks using `create_plan` with explicit dependencies.\n"
-    "2. For specific subtasks, use `retrieve_relevant_context(query)` to identify relevant code context.\n"
-    "3. Use `read_file(file_path)` for targeted deep dives into specific files.\n"
-    "4. When modifying repository code, use `replace_in_file(file_path, old_text, new_text)` for targeted "
-    "replacements, or `write_file(file_path, content)` to create/overwrite files.\n"
-    "5. IMPERATIVE: After applying code modifications, call `git_diff()` to inspect and evaluate the "
-    "actual repository changes before marking tasks as complete.\n"
-    "6. Track progress using `update_task_status(task_id, status)` as tasks complete.\n"
-    "7. Revise your plan using `revise_plan(new_tasks, reason)` if repository evidence alters strategy.\n"
-    "8. Conclude with a comprehensive context-aware response when all tasks are complete."
+    "context retrieval, dynamic planning, safe code editing, and automated testing tools.\n\n"
+    "When given a software engineering goal or bug fix task:\n"
+    "1. Decompose goals into structured subtasks using `create_plan` with explicit dependencies.\n"
+    "2. Use `retrieve_relevant_context(query)` or `read_file(file_path)` to locate relevant code context.\n"
+    "3. Apply code modifications using `replace_in_file(file_path, old_text, new_text)` or `write_file`.\n"
+    "4. Inspect repository changes with `git_diff()`.\n"
+    "5. IMPERATIVE VALIDATION & SELF-CORRECTION LOOP:\n"
+    "   - Execute validation tests using `run_tests()`.\n"
+    "   - If tests pass (`Status: passed`), mark task completed.\n"
+    "   - If tests fail (`Status: failed`), observe error tracebacks/assertions, diagnose the root cause, "
+    "apply a corrective fix with `replace_in_file`, inspect `git_diff()`, and re-run `run_tests()`.\n"
+    "   - Stop retrying if recovery attempts reach max retries.\n"
+    "6. Conclude with a comprehensive context-aware response when all tasks pass validation."
 )
 
 
@@ -53,12 +55,15 @@ def get_default_llm() -> BaseChatModel:
 
 
 def sync_plan_from_messages(state: AgentState) -> AgentState:
-    """Helper to update state['plan'], state['retrieved_context'], and state['modified_files']."""
+    """Helper to update state plan, retrieved context, modified files, and validation results."""
     messages = state.get("messages", [])
     plan = state.get("plan")
     user_goal = state.get("user_goal", "")
     retrieved_context = list(state.get("retrieved_context") or [])
     modified_files = list(state.get("modified_files") or [])
+    validation_result = state.get("validation_result")
+    retry_count = 0
+    max_retries = state.get("max_retries", 3)
 
     for msg in messages:
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
@@ -87,15 +92,34 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
                     if fp and fp not in modified_files:
                         modified_files.append(fp)
 
+        elif msg.__class__.__name__ == "ToolMessage":
+            content = getattr(msg, "content", "")
+            if "=== Test Execution Result ===" in content:
+                status = "passed" if "Status: passed" in content else ("failed" if "Status: failed" in content else ("timeout" if "Status: timeout" in content else "error"))
+                summary_line = [line for line in content.splitlines() if line.startswith("Summary:")]
+                summary = summary_line[0].replace("Summary:", "").strip() if summary_line else ""
+
+                validation_result = ValidationResult(
+                    status=status,
+                    exit_code=0 if status == "passed" else (1 if status == "failed" else None),
+                    summary=summary,
+                    output=content,
+                )
+                if status != "passed":
+                    retry_count += 1
+
     updated_state = dict(state)
     updated_state["plan"] = plan
     updated_state["retrieved_context"] = retrieved_context
     updated_state["modified_files"] = modified_files
+    updated_state["validation_result"] = validation_result
+    updated_state["retry_count"] = retry_count
+    updated_state["max_retries"] = max_retries
     return updated_state  # type: ignore
 
 
 def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = "."):
-    """Constructs and compiles the Phase 5 code modification agent loop.
+    """Constructs and compiles the Phase 6 autonomous testing & self-correction agent loop.
 
     Args:
         llm: Optional chat model instance. Defaults to ChatOpenAI configured via env.
@@ -111,7 +135,7 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
     llm_with_tools = llm.bind_tools(tools)
 
     def reason_node(state: AgentState) -> dict:
-        """Reasoning node that invokes the model with accumulated messages and context."""
+        """Reasoning node that invokes the model with accumulated messages and validation state."""
         state = sync_plan_from_messages(state)
         messages = list(state.get("messages", []))
         user_goal = state.get("user_goal", "")
@@ -134,6 +158,9 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
             res_dict["retrieved_context"] = state["retrieved_context"]
         if state.get("modified_files"):
             res_dict["modified_files"] = state["modified_files"]
+        if state.get("validation_result"):
+            res_dict["validation_result"] = state["validation_result"]
+        res_dict["retry_count"] = state.get("retry_count", 0)
 
         if not state.get("messages") and user_goal:
             res_dict["messages"] = [HumanMessage(content=user_goal), response]
@@ -174,7 +201,7 @@ def run_agent(goal: str, workspace_root: str = ".", llm: BaseChatModel | None = 
         llm: Optional chat model (useful for passing mocked LLMs in tests).
 
     Returns:
-        Final state dictionary containing conversation history, plan, and modified files.
+        Final state dictionary containing conversation history, plan, and validation results.
     """
     graph = build_agent_graph(llm=llm, workspace_root=workspace_root)
     initial_state = {
@@ -184,6 +211,9 @@ def run_agent(goal: str, workspace_root: str = ".", llm: BaseChatModel | None = 
         "plan": None,
         "retrieved_context": [],
         "modified_files": [],
+        "validation_result": None,
+        "retry_count": 0,
+        "max_retries": 3,
     }
 
     final_state = graph.invoke(initial_state)
@@ -208,6 +238,8 @@ def main():
         messages = final_state.get("messages", [])
         plan = final_state.get("plan")
         modified_files = final_state.get("modified_files", [])
+        val_result = final_state.get("validation_result")
+        retry_count = final_state.get("retry_count", 0)
 
         print("\n=== Agent Trace ===")
         for msg in messages:
@@ -229,6 +261,12 @@ def main():
             print("\n=== Modified Files ===")
             for mf in modified_files:
                 print(f"  • {mf}")
+
+        if val_result:
+            print("\n=== Validation Result ===")
+            print(f"Status: {val_result.get('status')}")
+            print(f"Summary: {val_result.get('summary')}")
+            print(f"Recovery Retries Performed: {retry_count}")
 
         if plan:
             print("\n=== Final Plan State ===")

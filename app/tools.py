@@ -1,9 +1,10 @@
-"""Minimal safe read-only and code modification tools for Phase 5 Autonomous Coding Agent."""
+"""Minimal safe read-only, code modification, planning, and validation tools for Phase 6 Autonomous Coding Agent."""
 
 import ast
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 from langchain_core.tools import tool
 
@@ -449,6 +450,87 @@ def _replace_in_file_impl(file_path: str, old_text: str, new_text: str, workspac
 
 
 # -----------------------------------------------------------------------------
+# Phase 6 Controlled Validation & Test Execution Implementation
+# -----------------------------------------------------------------------------
+def _run_tests_impl(
+    target_directory: str = ".",
+    workspace_root: str = ".",
+    timeout_seconds: int = 30,
+    max_output_chars: int = 4000,
+) -> str:
+    """Safely execute pytest validation tests inside workspace root with timeout and output bounding."""
+    try:
+        resolved_dir = safe_resolve_path(workspace_root, target_directory)
+    except ValueError as err:
+        return f"Error: {err}"
+
+    if not resolved_dir.exists():
+        return f"Error: Target directory '{target_directory}' does not exist."
+
+    cmd = [sys.executable, "-m", "pytest"]
+
+    try:
+        res = subprocess.run(
+            cmd,
+            cwd=resolved_dir,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+
+        exit_code = res.returncode
+        status = "passed" if exit_code == 0 else "failed"
+        summary = (
+            "All tests passed successfully."
+            if exit_code == 0
+            else f"Test validation failed with exit code {exit_code}."
+        )
+
+        combined_output = (res.stdout + "\n" + res.stderr).strip()
+        if len(combined_output) > max_output_chars:
+            combined_output = (
+                combined_output[:max_output_chars]
+                + f"\n... (test output truncated at {max_output_chars} characters)"
+            )
+
+        return (
+            f"=== Test Execution Result ===\n"
+            f"Status: {status}\n"
+            f"Exit Code: {exit_code}\n"
+            f"Summary: {summary}\n"
+            f"Output:\n----------------------------------------\n"
+            f"{combined_output}\n"
+            f"----------------------------------------"
+        )
+
+    except subprocess.TimeoutExpired as exc:
+        output_text = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
+        if len(output_text) > max_output_chars:
+            output_text = output_text[:max_output_chars] + f"\n... (truncated)"
+
+        return (
+            f"=== Test Execution Result ===\n"
+            f"Status: timeout\n"
+            f"Exit Code: null\n"
+            f"Summary: Test execution timed out after {timeout_seconds} seconds.\n"
+            f"Output:\n----------------------------------------\n"
+            f"TimeoutExpired: Process killed after exceeding {timeout_seconds}s limit.\n{output_text}\n"
+            f"----------------------------------------"
+        )
+    except Exception as exc:
+        return (
+            f"=== Test Execution Result ===\n"
+            f"Status: error\n"
+            f"Exit Code: null\n"
+            f"Summary: Error executing validation command.\n"
+            f"Output:\n----------------------------------------\n"
+            f"{str(exc)}\n"
+            f"----------------------------------------"
+        )
+
+
+# -----------------------------------------------------------------------------
 # Standalone Read-Only Repository Tools
 # -----------------------------------------------------------------------------
 @tool
@@ -560,6 +642,25 @@ def replace_in_file(file_path: str, old_text: str, new_text: str) -> str:
 
 
 # -----------------------------------------------------------------------------
+# Standalone Validation Tool
+# -----------------------------------------------------------------------------
+@tool
+def run_tests(target_directory: str = ".", timeout_seconds: int = 30) -> str:
+    """Execute pytest validation tests inside the controlled workspace directory.
+
+    Args:
+        target_directory: Relative path of directory containing tests (defaults to ".").
+        timeout_seconds: Maximum allowed execution time in seconds (defaults to 30).
+
+    Returns:
+        Structured test result observation (Status, Exit Code, Summary, Output traceback).
+    """
+    return _run_tests_impl(
+        target_directory=target_directory, workspace_root=".", timeout_seconds=timeout_seconds
+    )
+
+
+# -----------------------------------------------------------------------------
 # Standalone Planning Tools
 # -----------------------------------------------------------------------------
 @tool
@@ -624,7 +725,7 @@ def revise_plan(new_tasks: list[dict], reason: str) -> str:
 
 
 def create_workspace_tools(workspace_root: str = "."):
-    """Create repository inspection, retrieval, code modification, and planning tools bound to workspace root.
+    """Create repository inspection, retrieval, code modification, validation, and planning tools bound to workspace root.
 
     Args:
         workspace_root: Path to the root workspace directory.
@@ -732,6 +833,23 @@ def create_workspace_tools(workspace_root: str = "."):
             file_path=file_path, old_text=old_text, new_text=new_text, workspace_root=workspace_root
         )
 
+    @tool
+    def run_tests(target_directory: str = ".", timeout_seconds: int = 30) -> str:
+        """Execute pytest validation tests inside the controlled workspace directory.
+
+        Args:
+            target_directory: Relative path of directory containing tests (defaults to ".").
+            timeout_seconds: Maximum allowed execution time in seconds (defaults to 30).
+
+        Returns:
+            Structured test result observation (Status, Exit Code, Summary, Output traceback).
+        """
+        return _run_tests_impl(
+            target_directory=target_directory,
+            workspace_root=workspace_root,
+            timeout_seconds=timeout_seconds,
+        )
+
     return [
         list_files,
         read_file,
@@ -741,6 +859,7 @@ def create_workspace_tools(workspace_root: str = "."):
         retrieve_relevant_context,
         write_file,
         replace_in_file,
+        run_tests,
         create_plan,
         update_task_status,
         revise_plan,
