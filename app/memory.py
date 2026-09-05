@@ -126,6 +126,8 @@ def serialize_state(state: AgentState, status: str = "running") -> dict[str, Any
     review_feedback = state.get("review_feedback")
     multi_agent_iteration = int(state.get("multi_agent_iteration", 0))
     max_multi_agent_iterations = int(state.get("max_multi_agent_iterations", 3))
+    execution_trace = state.get("execution_trace") or []
+    evaluation_report = state.get("evaluation_report")
 
     raw_messages = state.get("messages", [])
     serialized_messages = [serialize_message(m) for m in raw_messages]
@@ -164,6 +166,8 @@ def serialize_state(state: AgentState, status: str = "running") -> dict[str, Any
         "review_feedback": review_feedback,
         "multi_agent_iteration": multi_agent_iteration,
         "max_multi_agent_iterations": max_multi_agent_iterations,
+        "execution_trace": execution_trace,
+        "evaluation_report": evaluation_report,
         "messages": serialized_messages,
     }
 
@@ -210,6 +214,8 @@ def deserialize_state(data: dict[str, Any]) -> AgentState:
     review_feedback = data.get("review_feedback")
     multi_agent_iteration = int(data.get("multi_agent_iteration", 0))
     max_multi_agent_iterations = int(data.get("max_multi_agent_iterations", 3))
+    execution_trace = data.get("execution_trace")
+    evaluation_report = data.get("evaluation_report")
 
     raw_messages = data.get("messages") or []
     deserialized_messages = [deserialize_message(m) for m in raw_messages]
@@ -247,6 +253,8 @@ def deserialize_state(data: dict[str, Any]) -> AgentState:
         review_feedback=review_feedback,
         multi_agent_iteration=multi_agent_iteration,
         max_multi_agent_iterations=max_multi_agent_iterations,
+        execution_trace=execution_trace,
+        evaluation_report=evaluation_report,
         messages=deserialized_messages,
     )
 

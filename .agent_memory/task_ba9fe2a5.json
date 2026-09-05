@@ -1,0 +1,137 @@
+{
+  "version": "1.0",
+  "task_id": "task_ba9fe2a5",
+  "user_goal": "Commit change",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-21/test_commit_requires_approval0",
+  "status": "paused",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": null,
+  "retry_count": 0,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": "Unapproved commit",
+  "commit_created": false,
+  "push_requested": false,
+  "pr_requested": false,
+  "mode": "single_agent",
+  "agent_role": null,
+  "analysis_result": null,
+  "coding_result": null,
+  "review_result": null,
+  "review_status": "pending",
+  "review_feedback": null,
+  "multi_agent_iteration": 0,
+  "max_multi_agent_iterations": 3,
+  "execution_trace": [
+    {
+      "timestamp": 1788627746.89,
+      "event_type": "agent_start",
+      "agent_role": "single_agent",
+      "tool_name": null,
+      "status": "started",
+      "duration": null,
+      "metadata": null
+    },
+    {
+      "timestamp": 1788627746.932,
+      "event_type": "agent_end",
+      "agent_role": "single_agent",
+      "status": "paused",
+      "duration": 0.042,
+      "metadata": null
+    }
+  ],
+  "evaluation_report": {
+    "task_id": "task_ba9fe2a5",
+    "task_success": false,
+    "final_status": "uncertain",
+    "execution_time": 0.042,
+    "start_time": 1788627746.89,
+    "end_time": 1788627746.932,
+    "tool_call_count": 1,
+    "successful_tool_calls": 0,
+    "failed_tool_calls": 1,
+    "tool_calls_by_tool": {
+      "git_commit": 1
+    },
+    "iteration_count": 1,
+    "retry_count": 0,
+    "recovery_attempts": 0,
+    "successful_recoveries": 0,
+    "failed_recoveries": 0,
+    "validation_attempts": 0,
+    "validation_passes": 0,
+    "validation_failures": 0,
+    "timeouts": 0,
+    "retrieval_metrics": null,
+    "multi_agent_metrics": null,
+    "human_interventions": 0,
+    "error_count": 1,
+    "error_categories": {
+      "approval_error": 1
+    },
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null,
+    "events": [
+      {
+        "timestamp": 1788627746.89,
+        "event_type": "agent_start",
+        "agent_role": "single_agent",
+        "tool_name": null,
+        "status": "started",
+        "duration": null,
+        "metadata": null
+      },
+      {
+        "timestamp": 1788627746.932,
+        "event_type": "agent_end",
+        "agent_role": "single_agent",
+        "status": "paused",
+        "duration": 0.042,
+        "metadata": null
+      }
+    ]
+  },
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Commit change"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Attempting commit without requesting approval first.",
+      "tool_calls": [
+        {
+          "name": "git_commit",
+          "args": {
+            "message": "Unapproved commit"
+          },
+          "id": "c1",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "Error: Human approval required before performing git commit (approval_status is not 'approved'). Please invoke request_human_approval tool first.",
+      "tool_call_id": "c1",
+      "name": "git_commit"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Finished with no further actions.",
+      "tool_calls": []
+    }
+  ]
+}

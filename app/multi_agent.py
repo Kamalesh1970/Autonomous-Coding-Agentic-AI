@@ -377,6 +377,13 @@ def run_multi_agent(
         from app.agent import get_default_llm
         llm = get_default_llm()
 
+    import time
+    from app.evaluation import ExecutionTrace, generate_evaluation_report
+
+    t_start = time.time()
+    trace = ExecutionTrace(task_id=task_id)
+    trace.record_event(event_type="agent_start", agent_role="orchestrator", status="started")
+
     initial_state: AgentState = {
         "task_id": task_id,
         "status": "running",
@@ -399,6 +406,8 @@ def run_multi_agent(
         "review_feedback": None,
         "multi_agent_iteration": 0,
         "max_multi_agent_iterations": max_iterations,
+        "execution_trace": trace.get_events(),
+        "evaluation_report": None,
     }
 
     set_active_approval_status(workspace_root, "not_required")
@@ -411,6 +420,21 @@ def run_multi_agent(
         final_state["status"] = "completed"
     else:
         final_state["status"] = "failed"
+
+    t_end = time.time()
+    current_trace = final_state.get("execution_trace") or []
+    current_trace.append({
+        "timestamp": round(t_end, 3),
+        "event_type": "agent_end",
+        "agent_role": "orchestrator",
+        "status": final_state.get("status", "completed"),
+        "duration": round(t_end - t_start, 3),
+        "metadata": None,
+    })
+    final_state["execution_trace"] = current_trace
+
+    report = generate_evaluation_report(final_state, start_time=t_start, end_time=t_end)
+    final_state["evaluation_report"] = report
 
     if task_id:
         try:

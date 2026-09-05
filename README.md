@@ -1,4 +1,4 @@
-# Autonomous Coding Agentic AI (Phase 12: Multi-Agent Software Engineering Architecture)
+# Autonomous Coding Agentic AI (Phase 13: Observability & Evaluation System)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
@@ -6,67 +6,83 @@ Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/o
 
 ---
 
-## 🎯 What is Phase 12?
+## 🎯 What is Phase 13?
 
-Phase 12 introduces a **specialized Multi-Agent Software Engineering Architecture** (`app/multi_agent.py`) using **LangGraph**, where specialized agents collaborate through shared state (`AgentState`) under strict least-privilege tool subsets to solve repository-level tasks:
+Phase 13 equips the agent framework with a lightweight, non-intrusive **Observability, Telemetry, and Evaluation System** (`app/evaluation.py`). The system collects structured execution events, tracks task metrics, classifies errors, evaluates goal verification and recovery success, exports sanitized JSON reports, and enables repeatable single-agent vs multi-agent benchmark comparisons with statistical aggregations.
 
 ```text
-               +-------------------+
-               |  User Goal / Task |
-               +---------+---------+
-                         |
-                         v
-               +-------------------+
-               |   Analyzer Agent  |  (Read-Only Retrieval & Architectural Planning)
-               +---------+---------+
-                         |
-                         v
-               +-------------------+
-               |    Coder Agent    |  (Targeted File Editing & Local Test Running)
-               +---------+---------+
-                         |
-                         v
-               +-------------------+
-               |   Reviewer Agent  |  (Read-Only Diff & Quality Verification)
-               +---------+---------+
-                         |
-                 [Review Status]
-              /         |         \
-    "approved"  "changes_requested" "blocked"
-           /            |            \
-          v             v             v
-       [END]     [Retry Iteration]   [END]
+  [AGENT EXECUTION]  --->  [EXECUTION TRACE (In-Memory)]  --->  [GOAL VERIFICATION & METRICS]  --->  [SANITIZED JSON REPORT]
 ```
 
 ---
 
-## 👥 Specialized Agent Roles & Capability Matrix
+## 📊 Tracked Metrics & Observability Architecture
 
-| Role | Tool Subset & Access Boundaries | Responsibilities | Output State Field |
-| :--- | :--- | :--- | :--- |
-| **Analyzer** | `list_files`, `read_file`, `search_code`, `git_status`, `git_diff`, `retrieve_hybrid_context`, planning | Repository structure analysis, risk assessment, architectural change planning. **Read-only** (No file edits). | `analysis_result` |
-| **Coder** | `write_file`, `replace_in_file`, `run_tests`, read & retrieval tools, planning | Applying code modifications, executing tests, addressing reviewer feedback. Cannot execute direct Git delivery. | `coding_result`, `modified_files` |
-| **Reviewer** | `git_diff`, `git_status`, `read_file`, `search_code`, `run_tests`, `verify_goal` | Inspecting git diffs, evaluating test output, approving or requesting code changes. **Read-only** (No file edits). | `review_result`, `review_status`, `review_feedback` |
-| **Orchestrator** | Shared state evaluation & flow control | Iteration tracking (`multi_agent_iteration`), review feedback routing, enforcing iteration limits (`max_multi_agent_iterations`). | `multi_agent_iteration` |
-
----
-
-## 🔄 Self-Correcting Review Loop
-
-If the **Reviewer Agent** issues `STATUS: CHANGES_REQUESTED`, the **Orchestrator** automatically routes the state back to the **Coder Agent** with the detailed `review_feedback`. The Coder fixes the code, runs tests, and resubmits to the Reviewer. The loop repeats until:
-1. `review_status == "approved"` $\rightarrow$ Task completed.
-2. `review_status == "blocked"` $\rightarrow$ Escalate & stop.
-3. `multi_agent_iteration >= max_multi_agent_iterations` $\rightarrow$ Max iterations reached, stop safely.
+| Metric Area | Tracked Fields | Description / Purpose |
+| :--- | :--- | :--- |
+| **Task Success** | `task_success`, `final_status` | Evaluates true task completion via Phase 7 goal verification (`success`, `failed`, `blocked`, `uncertain`). |
+| **Execution Duration** | `execution_time`, `start_time`, `end_time` | Monotonic timing for agent execution overhead without wall-clock drift. |
+| **Tool Call Metrics** | `tool_call_count`, `successful_tool_calls`, `failed_tool_calls`, `tool_calls_by_tool` | Granular per-tool usage and failure counts without logging sensitive arguments. |
+| **Iterative Execution** | `iteration_count`, `retry_count` | Number of meaningful reasoning iterations and code modification retries. |
+| **Recovery Metrics** | `recovery_attempts`, `successful_recoveries`, `failed_recoveries` | Tracks self-correction loops where failed test runs are followed by code fixes and passing tests. |
+| **Validation Metrics** | `validation_attempts`, `validation_passes`, `validation_failures`, `timeouts` | Tracks pytest execution passes, failures, and timeout events. |
+| **Retrieval Metrics** | `query_count`, `retrieved_chunks`, `queries` | Integrates Phase 11 hybrid semantic/lexical/metadata context retrieval telemetry. |
+| **Multi-Agent Metrics** | `orchestration_iterations`, `review_iterations`, `review_status`, `review_approvals`, `review_rejections` | Phase 12 multi-agent role execution distribution and reviewer feedback decisions. |
+| **Human Interventions**| `human_interventions` | Tracks explicit human approval requests (`commit`, `push`, `pull_request`). |
+| **Error Classification**| `error_count`, `error_categories` | Categorizes errors (`tool_error`, `validation_error`, `verification_error`, `security_error`, `retrieval_error`, `agent_error`, `approval_error`, `timeout`). |
 
 ---
 
-## 📊 Single-Agent vs Multi-Agent Comparison (`MultiAgentEvaluator`)
+## 🛡️ Security & Secret Scrubbing
 
-`MultiAgentEvaluator` provides standard benchmarking metrics comparing single-agent and multi-agent modes across identical tasks:
-- **Execution Time (s)**
-- **Modified Files Count**
-- **Review Status & Retries**
-- **Test Pass Rate**
+Observability is strictly isolated from secret leaks:
+- ❌ API keys (`sk-*`, `ghp_*`), passwords, bearer tokens, private keys, `.env` file dumps are automatically redacted to `[REDACTED_SECRET]`.
+- ❌ Raw source code dumps, full prompts, or authorization headers are never logged in telemetry or JSON exports.
+
+---
+
+## ⚙️ JSON Report Export
+
+Evaluation reports are serializable to clean JSON:
+
+```json
+{
+  "task_id": "task_12345",
+  "task_success": true,
+  "final_status": "success",
+  "execution_time": 4.12,
+  "tool_call_count": 5,
+  "successful_tool_calls": 5,
+  "failed_tool_calls": 0,
+  "tool_calls_by_tool": {
+    "read_file": 2,
+    "replace_in_file": 1,
+    "run_tests": 1,
+    "verify_goal": 1
+  },
+  "iteration_count": 1,
+  "retry_count": 0,
+  "recovery_attempts": 0,
+  "successful_recoveries": 0,
+  "human_interventions": 0,
+  "error_count": 0
+}
+```
+
+---
+
+## 📈 Benchmark Aggregation & Mode Comparison
+
+`calculate_benchmark_statistics` and `compare_agent_evaluations` compute aggregate statistics across $N$ task runs:
+- **Statistical Aggregation**: `mean`, `median`, `min`, `max`, and `success_rate`.
+- **Single-Agent vs Multi-Agent Comparison**: Side-by-side performance delta comparisons (execution time, tool call counts, success rate, iterations).
+
+---
+
+## 👥 Multi-Agent Architecture (Phase 12)
+
+- **Specialized Roles**: Analyzer (Read-only), Coder (Edits & tests), Reviewer (Read-only quality evaluation), Orchestrator (Iterative routing).
+- **Self-Correcting Review Loop**: Automatic retry on `STATUS: CHANGES_REQUESTED`.
 
 ---
 
@@ -85,31 +101,22 @@ If the **Reviewer Agent** issues `STATUS: CHANGES_REQUESTED`, the **Orchestrator
 
 ---
 
-## 🛡️ Security & Sandbox Controls (`app/sandbox.py`)
-
-- ❌ Workspace boundary enforced (file traversal outside sandbox root blocked).
-- ❌ Secrets (`.env`, `*.pem`, `*.key`, `id_rsa`, `credentials*`, `secrets*`) excluded.
-- ❌ Destructive Git commands (`git reset --hard`, `git clean -fd`, `git push --force`) prohibited.
-- ❌ Role tool separation strictly enforced.
-
----
-
-## 🛠️ Execution Modes
+## 🛠️ Usage Example
 
 ```python
 from app.agent import run_agent
+from app.evaluation import export_report_json
 
-# Default Single-Agent Mode (Backward compatible with Phases 1-11)
-result_single = run_agent(
-    goal="Fix bug in calculation module",
-    mode="single_agent",
-)
+# Execute task with automated telemetry and evaluation report generation
+state = run_agent(goal="Fix return value in math_utils.py", mode="single_agent")
 
-# Multi-Agent Orchestration Mode (Phase 12)
-result_multi = run_agent(
-    goal="Fix bug in calculation module",
-    mode="multi_agent",
-)
+# Access evaluation report
+report = state["evaluation_report"]
+print(f"Task Success: {report['task_success']}")
+print(f"Execution Time: {report['execution_time']}s")
+
+# Export sanitized JSON report to file
+export_report_json(report, file_path="evaluation_report.json")
 ```
 
 ---
@@ -117,9 +124,9 @@ result_multi = run_agent(
 ## 🧪 Running Tests
 
 ```bash
-# Run multi-agent test suite
-pytest -v tests/test_multi_agent.py
+# Run Phase 13 observability & evaluation test suite
+pytest -v tests/test_evaluation.py
 
-# Run full project test suite
+# Run complete project test suite
 pytest -v
 ```

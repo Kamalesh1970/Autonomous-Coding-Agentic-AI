@@ -36,6 +36,49 @@ class ReviewResult(TypedDict, total=False):
     issues: list[str]
 
 
+class ExecutionEvent(TypedDict, total=False):
+    """Structured representation of a single telemetry trace event."""
+    timestamp: float
+    event_type: str
+    agent_role: str | None
+    tool_name: str | None
+    status: str | None
+    duration: float | None
+    metadata: dict | None
+
+
+class EvaluationReport(TypedDict, total=False):
+    """Structured evaluation report containing summary metrics and execution outcome."""
+    task_id: str
+    task_success: bool
+    final_status: str
+    execution_time: float
+    start_time: float | None
+    end_time: float | None
+    tool_call_count: int
+    successful_tool_calls: int
+    failed_tool_calls: int
+    tool_calls_by_tool: dict[str, int]
+    iteration_count: int
+    retry_count: int
+    recovery_attempts: int
+    successful_recoveries: int
+    failed_recoveries: int
+    validation_attempts: int
+    validation_passes: int
+    validation_failures: int
+    timeouts: int
+    retrieval_metrics: dict | None
+    multi_agent_metrics: dict | None
+    human_interventions: int
+    error_count: int
+    error_categories: dict[str, int]
+    input_tokens: int | None
+    output_tokens: int | None
+    total_tokens: int | None
+    events: list[ExecutionEvent]
+
+
 class Task(TypedDict, total=False):
     """Structured representation of a subtask within an execution plan.
 
@@ -161,6 +204,8 @@ class AgentState(TypedDict, total=False):
     review_feedback: str | None
     multi_agent_iteration: int
     max_multi_agent_iterations: int
+    execution_trace: list[ExecutionEvent] | None
+    evaluation_report: EvaluationReport | None
 
 
 

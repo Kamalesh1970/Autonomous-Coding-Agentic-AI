@@ -337,6 +337,13 @@ def run_agent(
     Returns:
         Final state dictionary containing conversation history, plan, validation, verification results, and task_id.
     """
+    import time
+    from app.evaluation import ExecutionTrace, generate_evaluation_report
+
+    t_start = time.time()
+    trace = ExecutionTrace(task_id=task_id if task_id else "task_default")
+    trace.record_event(event_type="agent_start", agent_role="single_agent", status="started")
+
     if mode == "multi_agent" and not resume:
         from app.multi_agent import run_multi_agent
         return run_multi_agent(
@@ -352,6 +359,10 @@ def run_agent(
         initial_state = load_state(task_id, storage_dir=storage_dir)
         if workspace_root != ".":
             initial_state["workspace_root"] = workspace_root
+        existing_trace = initial_state.get("execution_trace") or []
+        for ev in trace.get_events():
+            existing_trace.append(ev)
+        initial_state["execution_trace"] = existing_trace
     else:
         if not task_id:
             import uuid
@@ -363,6 +374,7 @@ def run_agent(
         initial_state = {
             "task_id": task_id,
             "status": "running",
+            "mode": "single_agent",
             "user_goal": goal,
             "workspace_root": workspace_root,
             "messages": [HumanMessage(content=goal)],
@@ -373,6 +385,8 @@ def run_agent(
             "verification_result": None,
             "retry_count": 0,
             "max_retries": 3,
+            "execution_trace": trace.get_events(),
+            "evaluation_report": None,
         }
 
     from app.state import set_active_approval_status
@@ -387,6 +401,21 @@ def run_agent(
         synced_state["status"] = "completed"
     else:
         synced_state["status"] = "paused" if synced_state.get("status") == "running" else synced_state.get("status", "running")
+
+    t_end = time.time()
+    current_trace = synced_state.get("execution_trace") or []
+    current_trace.append({
+        "timestamp": round(t_end, 3),
+        "event_type": "agent_end",
+        "agent_role": "single_agent",
+        "status": synced_state.get("status", "completed"),
+        "duration": round(t_end - t_start, 3),
+        "metadata": None,
+    })
+    synced_state["execution_trace"] = current_trace
+
+    report = generate_evaluation_report(synced_state, start_time=t_start, end_time=t_end)
+    synced_state["evaluation_report"] = report
 
     if task_id:
         try:
