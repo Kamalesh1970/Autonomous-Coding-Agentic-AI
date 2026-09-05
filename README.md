@@ -1,4 +1,4 @@
-# Autonomous Coding Agentic AI (Phase 11: Advanced Code Retrieval / RAG)
+# Autonomous Coding Agentic AI (Phase 12: Multi-Agent Software Engineering Architecture)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
@@ -6,111 +6,120 @@ Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/o
 
 ---
 
-## 🎯 What is Phase 11?
+## 🎯 What is Phase 12?
 
-Phase 11 equips the agent with **Advanced Code Retrieval / RAG** capabilities (`retrieve_hybrid_context`), integrating repository-aware code chunking, vector embeddings, hybrid ranking, local index lifecycle caching, and retrieval benchmarking.
+Phase 12 introduces a **specialized Multi-Agent Software Engineering Architecture** (`app/multi_agent.py`) using **LangGraph**, where specialized agents collaborate through shared state (`AgentState`) under strict least-privilege tool subsets to solve repository-level tasks:
 
-The agentic retrieval workflow is:
-
-$$\text{USER GOAL / SUBTASK} \longrightarrow \text{CODE CHUNKING} \longrightarrow \text{EMBEDDINGS} \longrightarrow \text{HYBRID RANKING (Lexical + Semantic + Metadata)} \longrightarrow \text{CONTEXT BUDGET BOUNDING} \longrightarrow \text{AGENT REASONING}$$
+```text
+               +-------------------+
+               |  User Goal / Task |
+               +---------+---------+
+                         |
+                         v
+               +-------------------+
+               |   Analyzer Agent  |  (Read-Only Retrieval & Architectural Planning)
+               +---------+---------+
+                         |
+                         v
+               +-------------------+
+               |    Coder Agent    |  (Targeted File Editing & Local Test Running)
+               +---------+---------+
+                         |
+                         v
+               +-------------------+
+               |   Reviewer Agent  |  (Read-Only Diff & Quality Verification)
+               +---------+---------+
+                         |
+                 [Review Status]
+              /         |         \
+    "approved"  "changes_requested" "blocked"
+           /            |            \
+          v             v             v
+       [END]     [Retry Iteration]   [END]
+```
 
 ---
 
-## 🔍 Hybrid Retrieval Architecture (`app/retrieval.py`)
+## 👥 Specialized Agent Roles & Capability Matrix
 
-1. **Repository-Aware Code Chunking**:
-   - Parses Python files into AST function/class definitions and structured line/block sections with metadata (`file_path`, `start_line`, `end_line`, `content`, `language`, `symbol_name`, `symbol_type`).
-   - Automatically excludes secrets (`.env`, `*.pem`, `*.key`, `id_rsa`, `credentials*`, `secrets*`) and binary files.
+| Role | Tool Subset & Access Boundaries | Responsibilities | Output State Field |
+| :--- | :--- | :--- | :--- |
+| **Analyzer** | `list_files`, `read_file`, `search_code`, `git_status`, `git_diff`, `retrieve_hybrid_context`, planning | Repository structure analysis, risk assessment, architectural change planning. **Read-only** (No file edits). | `analysis_result` |
+| **Coder** | `write_file`, `replace_in_file`, `run_tests`, read & retrieval tools, planning | Applying code modifications, executing tests, addressing reviewer feedback. Cannot execute direct Git delivery. | `coding_result`, `modified_files` |
+| **Reviewer** | `git_diff`, `git_status`, `read_file`, `search_code`, `run_tests`, `verify_goal` | Inspecting git diffs, evaluating test output, approving or requesting code changes. **Read-only** (No file edits). | `review_result`, `review_status`, `review_feedback` |
+| **Orchestrator** | Shared state evaluation & flow control | Iteration tracking (`multi_agent_iteration`), review feedback routing, enforcing iteration limits (`max_multi_agent_iterations`). | `multi_agent_iteration` |
 
-2. **Embeddings & In-Memory Vector Index**:
-   - `BaseEmbeddingModel` interface supporting deterministic local `MockEmbeddingModel` (for 100% offline, zero-API-key testing) and optional `OpenAIEmbeddingModel` (`text-embedding-3-small`).
-   - `HybridCodeIndex`: In-memory index with automatic `mtime` file modification tracking to reuse cached index when files are unchanged and refresh automatically when code changes.
+---
 
-3. **Hybrid Ranking Formula**:
-   $$\text{Final Score} = (\text{Lexical Score} \times 0.4) + (\text{Semantic Score} \times 0.5) + (\text{Metadata Score} \times 0.1)$$
-   - **Lexical Score**: BM25 / term frequency match across query terms and code content.
-   - **Semantic Score**: Cosine similarity between query embedding vector and chunk vector.
-   - **Metadata Score**: Boosts matches on symbol names (function/class) and file paths.
+## 🔄 Self-Correcting Review Loop
 
-4. **Context Budget Bounding**:
-   - Bounded by `top_k`, `max_context_chars`, and `max_chunk_chars` to return concise, high-value repository context without blowing up the LLM context window.
+If the **Reviewer Agent** issues `STATUS: CHANGES_REQUESTED`, the **Orchestrator** automatically routes the state back to the **Coder Agent** with the detailed `review_feedback`. The Coder fixes the code, runs tests, and resubmits to the Reviewer. The loop repeats until:
+1. `review_status == "approved"` $\rightarrow$ Task completed.
+2. `review_status == "blocked"` $\rightarrow$ Escalate & stop.
+3. `multi_agent_iteration >= max_multi_agent_iterations` $\rightarrow$ Max iterations reached, stop safely.
 
-5. **Retrieval Evaluation & Benchmarks**:
-   - `RetrievalEvaluator` measures Precision@K, Recall@K, and MRR (Mean Reciprocal Rank) to compare **Lexical**, **Semantic**, and **Hybrid** retrieval modes across benchmark tasks.
+---
+
+## 📊 Single-Agent vs Multi-Agent Comparison (`MultiAgentEvaluator`)
+
+`MultiAgentEvaluator` provides standard benchmarking metrics comparing single-agent and multi-agent modes across identical tasks:
+- **Execution Time (s)**
+- **Modified Files Count**
+- **Review Status & Retries**
+- **Test Pass Rate**
+
+---
+
+## 🔍 Advanced Code Retrieval / RAG (Phase 11)
+
+- **Repository-Aware Chunking**: Functions, classes, and logical line sections.
+- **Hybrid Ranking Formula**:
+  $$\text{Final Score} = (\text{Lexical Score} \times 0.4) + (\text{Semantic Score} \times 0.5) + (\text{Metadata Score} \times 0.1)$$
 
 ---
 
 ## 🚦 Human-in-the-Loop Approval & Delivery Model (Phase 10)
 
 - **Actions Requiring Explicit Approval**: `git commit`, `git push`, `create_pull_request`.
-- **Read-Only / Safe Local Actions**: `git_status`, `git_diff`, `git_current_branch`, `git_create_branch`, `retrieve_hybrid_context`.
+- **Read-Only / Safe Local Actions**: `git_status`, `git_diff`, `retrieve_hybrid_context`.
 
 ---
 
 ## 🛡️ Security & Sandbox Controls (`app/sandbox.py`)
 
 - ❌ Workspace boundary enforced (file traversal outside sandbox root blocked).
-- ❌ Secrets (`.env`, `*.pem`, `*.key`, `id_rsa`, `credentials*`, `secrets*`) excluded from chunking and retrieval.
+- ❌ Secrets (`.env`, `*.pem`, `*.key`, `id_rsa`, `credentials*`, `secrets*`) excluded.
 - ❌ Destructive Git commands (`git reset --hard`, `git clean -fd`, `git push --force`) prohibited.
-- ❌ Credentials redacted from output logs.
+- ❌ Role tool separation strictly enforced.
 
 ---
 
-## 🛠️ Agent Toolset
+## 🛠️ Execution Modes
 
-1. `retrieve_hybrid_context(query, top_k=3)`: Retrieves ranked hybrid semantic + lexical + metadata code context chunks.
-2. `list_files(directory=".")`: Recursively lists relative file paths in workspace.
-3. `read_file(file_path)`: Reads text file content inside sandbox with byte limits and binary file detection.
-4. `search_code(query, directory=".")`: Plain-text search returning `file:line: snippet` matches.
-5. `git_status()`: Inspects repository Git branch, modified files, and untracked files.
-6. `git_diff()`: Inspects current unstaged and staged Git differences for edit feedback.
-7. `retrieve_relevant_context(query, directory=".")`: Phase 4 context retrieval snippet builder.
-8. `write_file(file_path, content)`: Safely creates or overwrites repository files inside sandbox.
-9. `replace_in_file(file_path, old_text, new_text)`: Targeted unique text replacement inside sandbox.
-10. `run_tests(target_directory=".", timeout_seconds=30)`: Controlled pytest execution in sandbox minimal environment.
-11. `verify_goal(status, summary, evidence)`: Evaluates whether original user goal is satisfied based on repository evidence.
-12. `request_human_approval(action, reason, risk)`: Requests human approval for commit/push/PR delivery actions.
-13. `git_commit(message, files)`: Performs approved Git commit.
-14. `git_push(remote, branch)`: Performs approved Git push.
-15. `create_pull_request(title, body, head_branch, base_branch)`: Creates pull request representation.
+```python
+from app.agent import run_agent
 
----
+# Default Single-Agent Mode (Backward compatible with Phases 1-11)
+result_single = run_agent(
+    goal="Fix bug in calculation module",
+    mode="single_agent",
+)
 
-## 📦 Installation
-
-```bash
-# Navigate to project directory
-cd autonomous-coding-agent
-
-# Create and activate virtual environment (Python 3.10+)
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+# Multi-Agent Orchestration Mode (Phase 12)
+result_multi = run_agent(
+    goal="Fix bug in calculation module",
+    mode="multi_agent",
+)
 ```
 
 ---
 
 ## 🧪 Running Tests
 
-The test suite is 100% deterministic and runs offline using mock model responses and temporary sandbox/Git fixtures (`pytest`):
-
 ```bash
+# Run multi-agent test suite
+pytest -v tests/test_multi_agent.py
+
+# Run full project test suite
 pytest -v
-```
-
----
-
-## 🚀 Running the Agent
-
-Set up your `.env` file with your OpenAI key:
-```env
-OPENAI_API_KEY=your_actual_api_key
-OPENAI_MODEL_NAME=gpt-4o-mini
-```
-
-Run a new task:
-```bash
-python3 -m app.agent "Fix the multiply function so that the project's tests pass." .
 ```

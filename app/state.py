@@ -8,6 +8,32 @@ TaskStatus = Literal["pending", "in_progress", "completed", "failed", "blocked"]
 ValidationStatus = Literal["passed", "failed", "timeout", "error"]
 VerificationStatus = Literal["passed", "failed", "uncertain"]
 ApprovalStatus = Literal["not_required", "pending", "approved", "rejected"]
+AgentRole = Literal["analyzer", "coder", "reviewer", "orchestrator"]
+ReviewStatus = Literal["approved", "changes_requested", "blocked", "pending"]
+ExecutionMode = Literal["single_agent", "multi_agent"]
+
+
+class AnalysisResult(TypedDict, total=False):
+    """Structured representation of repository analysis output."""
+    summary: str
+    affected_files: list[str]
+    recommended_approach: str
+    risk_assessment: str
+
+
+class CodingResult(TypedDict, total=False):
+    """Structured representation of coding phase output."""
+    summary: str
+    modified_files: list[str]
+    test_results: dict | None
+
+
+class ReviewResult(TypedDict, total=False):
+    """Structured representation of code review output."""
+    status: ReviewStatus
+    feedback: str
+    score: float | None
+    issues: list[str]
 
 
 class Task(TypedDict, total=False):
@@ -126,6 +152,15 @@ class AgentState(TypedDict, total=False):
     commit_created: bool
     push_requested: bool
     pr_requested: bool
+    mode: ExecutionMode
+    agent_role: AgentRole | None
+    analysis_result: AnalysisResult | None
+    coding_result: CodingResult | None
+    review_result: ReviewResult | None
+    review_status: ReviewStatus
+    review_feedback: str | None
+    multi_agent_iteration: int
+    max_multi_agent_iterations: int
 
 
 

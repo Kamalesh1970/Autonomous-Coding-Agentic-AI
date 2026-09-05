@@ -321,6 +321,7 @@ def run_agent(
     task_id: str | None = None,
     resume: bool = False,
     storage_dir: str = ".agent_memory",
+    mode: Literal["single_agent", "multi_agent"] = "single_agent",
 ) -> dict:
     """Executes or resumes the agent loop for a software engineering goal with persistent memory.
 
@@ -331,10 +332,20 @@ def run_agent(
         task_id: Optional unique task identifier for persistence and resume.
         resume: Set to True to resume an existing task from storage_dir/<task_id>.json.
         storage_dir: Directory path for persistent JSON memory storage.
+        mode: Execution mode ('single_agent' default or 'multi_agent').
 
     Returns:
         Final state dictionary containing conversation history, plan, validation, verification results, and task_id.
     """
+    if mode == "multi_agent" and not resume:
+        from app.multi_agent import run_multi_agent
+        return run_multi_agent(
+            goal=goal,
+            workspace_root=workspace_root,
+            llm=llm,
+            task_id=task_id,
+            storage_dir=storage_dir,
+        )
     if resume:
         if not task_id:
             raise ValueError("Error: task_id must be provided when resume=True.")

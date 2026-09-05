@@ -1,31 +1,10 @@
 {
   "version": "1.0",
-  "task_id": "task_plan_1",
-  "user_goal": "Task Plan",
-  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-20/test_plan_survives_resume0",
-  "status": "running",
-  "plan": {
-    "goal": "Task Plan",
-    "tasks": [
-      {
-        "id": "t1",
-        "title": "Step 1",
-        "description": "",
-        "status": "completed",
-        "dependencies": []
-      },
-      {
-        "id": "t2",
-        "title": "Step 2",
-        "description": "",
-        "status": "pending",
-        "dependencies": []
-      }
-    ],
-    "current_task_id": "t2",
-    "revision_count": 0,
-    "revision_reason": null
-  },
+  "task_id": "task_fa90c590",
+  "user_goal": "Add docs to main.py",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-20/test_multi_agent_evaluator0",
+  "status": "paused",
+  "plan": null,
   "retrieved_context": [],
   "modified_files": [],
   "validation_result": null,
@@ -56,7 +35,12 @@
   "messages": [
     {
       "type": "HumanMessage",
-      "content": "Task Plan"
+      "content": "Add docs to main.py"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Single agent response.",
+      "tool_calls": []
     }
   ]
 }

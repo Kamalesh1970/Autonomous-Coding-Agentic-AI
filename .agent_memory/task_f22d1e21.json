@@ -1,0 +1,96 @@
+{
+  "version": "1.0",
+  "task_id": "task_f22d1e21",
+  "user_goal": "Verify config.py contains APP_NAME",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-20/test_verification_uses_reposit0",
+  "status": "completed",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": {
+    "status": "passed",
+    "summary": "APP_NAME is defined in config.py.",
+    "evidence": [
+      "config.py contains APP_NAME = 'AutonomousAgent'"
+    ]
+  },
+  "retry_count": 0,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": null,
+  "commit_created": false,
+  "push_requested": false,
+  "pr_requested": false,
+  "mode": "single_agent",
+  "agent_role": null,
+  "analysis_result": null,
+  "coding_result": null,
+  "review_result": null,
+  "review_status": "pending",
+  "review_feedback": null,
+  "multi_agent_iteration": 0,
+  "max_multi_agent_iterations": 3,
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Verify config.py contains APP_NAME"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Reading config.py to verify APP_NAME definition.",
+      "tool_calls": [
+        {
+          "name": "read_file",
+          "args": {
+            "file_path": "config.py"
+          },
+          "id": "c1",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "APP_NAME = 'AutonomousAgent'\n",
+      "tool_call_id": "c1",
+      "name": "read_file"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Verifying goal against retrieved evidence.",
+      "tool_calls": [
+        {
+          "name": "verify_goal",
+          "args": {
+            "status": "passed",
+            "summary": "APP_NAME is defined in config.py.",
+            "evidence": [
+              "config.py contains APP_NAME = 'AutonomousAgent'"
+            ]
+          },
+          "id": "c2",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "=== Goal Verification Result ===\nStatus: passed\nSummary: APP_NAME is defined in config.py.\nEvidence:\n  • config.py contains APP_NAME = 'AutonomousAgent'",
+      "tool_call_id": "c2",
+      "name": "verify_goal"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Finished with no further actions.",
+      "tool_calls": []
+    }
+  ]
+}
