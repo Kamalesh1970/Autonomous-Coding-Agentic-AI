@@ -17,19 +17,24 @@ from app.state import AgentState, ExecutionEvent, EvaluationReport
 # -----------------------------------------------------------------------------
 SENSITIVE_KEY_PATTERNS = [
     r"api[_-]?key",
-    r"secret",
+    r"apikey",
+    r"access[_-]?token",
+    r"auth[_-]?token",
     r"token",
+    r"secret",
     r"password",
     r"credential",
     r"auth",
+    r"authorization",
+    r"client[_-]?secret",
     r"private[_-]?key",
     r"bearer",
 ]
 
 SENSITIVE_VALUE_PATTERNS = [
-    r"sk-[a-zA-Z0-9]{20,}",
-    r"ghp_[a-zA-Z0-9]{20,}",
-    r"-----BEGIN PRIVATE KEY-----",
+    r"sk-[a-zA-Z0-9_\-]{5,}",
+    r"ghp_[a-zA-Z0-9_\-]{5,}",
+    r"-----BEGIN PRIVATE KEY-----[^-----]*-----END PRIVATE KEY-----",
     r"bearer\s+[a-zA-Z0-9_\-\.]+",
 ]
 
@@ -37,19 +42,24 @@ SENSITIVE_VALUE_PATTERNS = [
 def sanitize_telemetry_value(value: Any) -> Any:
     """Sanitizes sensitive strings, credentials, or file dumps from telemetry values."""
     if isinstance(value, str):
-        # Scrub explicit secret pattern matches
+        text = value
+        # Scrub explicit secret pattern matches embedded in string
         for pat in SENSITIVE_VALUE_PATTERNS:
-            if re.search(pat, value, re.IGNORECASE):
-                return "[REDACTED_SECRET]"
+            text = re.sub(pat, "[REDACTED_SECRET]", text, flags=re.IGNORECASE)
+
+        # Scrub key=val or key: val patterns inside string
+        kv_pattern = r"((?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|secret|password|authorization|client[_-]?secret|private[_-]?key)\s*[:=]\s*['\"]?)([a-zA-Z0-9_\-\.]{3,})"
+        text = re.sub(kv_pattern, r"\1[REDACTED_SECRET]", text, flags=re.IGNORECASE)
+
         # Truncate overly long content strings
-        if len(value) > 2000:
-            return value[:2000] + " ... [truncated]"
-        return value
+        if len(text) > 2000:
+            return text[:2000] + " ... [truncated]"
+        return text
 
     if isinstance(value, dict):
         return sanitize_telemetry_dict(value)
 
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [sanitize_telemetry_value(item) for item in value]
 
     return value
@@ -57,6 +67,9 @@ def sanitize_telemetry_value(value: Any) -> Any:
 
 def sanitize_telemetry_dict(data: dict[str, Any]) -> dict[str, Any]:
     """Recursively redacts sensitive keys and values from telemetry metadata dicts."""
+    if not isinstance(data, dict):
+        return sanitize_telemetry_value(data)
+
     sanitized: dict[str, Any] = {}
     for key, val in data.items():
         key_str = str(key)

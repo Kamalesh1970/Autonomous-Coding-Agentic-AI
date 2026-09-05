@@ -1,4 +1,4 @@
-# Autonomous Coding Agentic AI (Phase 13: Observability & Evaluation System)
+# Autonomous Coding Agentic AI (Phase 14: Repeatable Benchmark & Experimental Framework)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
@@ -6,76 +6,74 @@ Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/o
 
 ---
 
-## 🎯 What is Phase 13?
+## 🎯 What is Phase 14?
 
-Phase 13 equips the agent framework with a lightweight, non-intrusive **Observability, Telemetry, and Evaluation System** (`app/evaluation.py`). The system collects structured execution events, tracks task metrics, classifies errors, evaluates goal verification and recovery success, exports sanitized JSON reports, and enables repeatable single-agent vs multi-agent benchmark comparisons with statistical aggregations.
+Phase 14 builds a **Repeatable Benchmark and Experimental Evaluation Framework** (`app/benchmark.py`) for the Autonomous Coding Agentic AI framework. It enables automated, reproducible software-engineering benchmark task execution against isolated temporary repositories, evaluating task completion, self-correction recovery, retrieval mode impact, single-agent vs multi-agent performance, software quality metrics, and exporting secret-sanitized JSON and CSV reports.
 
 ```text
-  [AGENT EXECUTION]  --->  [EXECUTION TRACE (In-Memory)]  --->  [GOAL VERIFICATION & METRICS]  --->  [SANITIZED JSON REPORT]
+  [BENCHMARK TASK]  --->  [ISOLATED TEMP REPO]  --->  [AGENT EXECUTION]  --->  [STATS AGGREGATION]  --->  [JSON & CSV EXPORTS]
 ```
 
 ---
 
-## 📊 Tracked Metrics & Observability Architecture
+## 🏆 Benchmark Tasks & Categories
 
-| Metric Area | Tracked Fields | Description / Purpose |
+The built-in deterministic benchmark suite (`BUILTIN_BENCHMARK_TASKS`) covers realistic software-engineering tasks across categories and difficulty levels:
+
+| Category | Task ID | Description | Difficulty |
+| :--- | :--- | :--- | :--- |
+| **Bug Fix** | `T001` | Fix arithmetic operation in `calculator.py`. | `easy` |
+| **Feature Addition** | `T002` | Add new function `multiply()` in `math_ops.py`. | `easy` |
+| **Test Fix** | `T003` | Update `format_name()` implementation to satisfy test assertion. | `easy` |
+| **Repo Understanding** | `T004` | Locate `APP_TIMEOUT` in `config.py` and update usages in `service.py`. | `medium` |
+| **Multi-File Change** | `T005` | Refactor model schema in `models.py` and creation service in `service.py`. | `medium` |
+| **Self-Correction** | `T006` | Fix buggy function in `utils.py` that fails initial test run. | `medium` |
+
+---
+
+## 🧪 Experiment Configurations & Repeatable Runs
+
+`ExperimentConfig` supports programmatic matrix experiments:
+- **Agent Modes**: `single_agent`, `multi_agent`.
+- **Retrieval Modes**: `lexical`, `semantic`, `hybrid`.
+- **Repeatable Runs**: `run_count` ($N$ runs) storing distinct `BenchmarkResult` instances.
+- **Reproducibility**: Explicit seed logging (`seed`).
+
+---
+
+## 📊 Aggregated Metrics & Exports
+
+| Metric | Calculation | Description |
 | :--- | :--- | :--- |
-| **Task Success** | `task_success`, `final_status` | Evaluates true task completion via Phase 7 goal verification (`success`, `failed`, `blocked`, `uncertain`). |
-| **Execution Duration** | `execution_time`, `start_time`, `end_time` | Monotonic timing for agent execution overhead without wall-clock drift. |
-| **Tool Call Metrics** | `tool_call_count`, `successful_tool_calls`, `failed_tool_calls`, `tool_calls_by_tool` | Granular per-tool usage and failure counts without logging sensitive arguments. |
-| **Iterative Execution** | `iteration_count`, `retry_count` | Number of meaningful reasoning iterations and code modification retries. |
-| **Recovery Metrics** | `recovery_attempts`, `successful_recoveries`, `failed_recoveries` | Tracks self-correction loops where failed test runs are followed by code fixes and passing tests. |
-| **Validation Metrics** | `validation_attempts`, `validation_passes`, `validation_failures`, `timeouts` | Tracks pytest execution passes, failures, and timeout events. |
-| **Retrieval Metrics** | `query_count`, `retrieved_chunks`, `queries` | Integrates Phase 11 hybrid semantic/lexical/metadata context retrieval telemetry. |
-| **Multi-Agent Metrics** | `orchestration_iterations`, `review_iterations`, `review_status`, `review_approvals`, `review_rejections` | Phase 12 multi-agent role execution distribution and reviewer feedback decisions. |
-| **Human Interventions**| `human_interventions` | Tracks explicit human approval requests (`commit`, `push`, `pull_request`). |
-| **Error Classification**| `error_count`, `error_categories` | Categorizes errors (`tool_error`, `validation_error`, `verification_error`, `security_error`, `retrieval_error`, `agent_error`, `approval_error`, `timeout`). |
+| **Pass@1** | $\text{Success Rate at } \text{run\_index}=1$ | Standard benchmark metric measuring first-pass success. |
+| **Success Rate** | $\frac{\text{Successful Runs}}{\text{Total Runs}}$ | Overall percentage of benchmark runs completing task verification. |
+| **Mean / Median Time** | $\text{mean}(t), \text{median}(t)$ | Execution overhead timing. |
+| **Recovery Rate** | $\frac{\text{Successful Recoveries}}{\text{Recovery Attempts}}$ | Self-correction capability score following test failures. |
+| **Validation Rate** | $\frac{\text{Validation Passes}}{\text{Validation Attempts}}$ | Percentage of pytest executions passing cleanly. |
+
+Evaluation reports and benchmark summaries export to secret-sanitized JSON (`export_benchmark_json`) and CSV (`export_benchmark_csv`).
+
+> [!NOTE]
+> Benchmark results must be generated from actual executions and are not guaranteed to favor any architecture.
 
 ---
 
-## 🛡️ Security & Secret Scrubbing
+## 🛠️ Running Benchmarks via CLI
 
-Observability is strictly isolated from secret leaks:
-- ❌ API keys (`sk-*`, `ghp_*`), passwords, bearer tokens, private keys, `.env` file dumps are automatically redacted to `[REDACTED_SECRET]`.
-- ❌ Raw source code dumps, full prompts, or authorization headers are never logged in telemetry or JSON exports.
+```bash
+# Run single-agent benchmark with hybrid retrieval (3 runs)
+python -m app.benchmark --mode single_agent --retrieval hybrid --runs 3 --export-json results.json --export-csv results.csv
 
----
-
-## ⚙️ JSON Report Export
-
-Evaluation reports are serializable to clean JSON:
-
-```json
-{
-  "task_id": "task_12345",
-  "task_success": true,
-  "final_status": "success",
-  "execution_time": 4.12,
-  "tool_call_count": 5,
-  "successful_tool_calls": 5,
-  "failed_tool_calls": 0,
-  "tool_calls_by_tool": {
-    "read_file": 2,
-    "replace_in_file": 1,
-    "run_tests": 1,
-    "verify_goal": 1
-  },
-  "iteration_count": 1,
-  "retry_count": 0,
-  "recovery_attempts": 0,
-  "successful_recoveries": 0,
-  "human_interventions": 0,
-  "error_count": 0
-}
+# Run multi-agent benchmark with lexical retrieval
+python -m app.benchmark --mode multi_agent --retrieval lexical --runs 1 --export-json multi_results.json
 ```
 
 ---
 
-## 📈 Benchmark Aggregation & Mode Comparison
+## 📊 Observability & Evaluation System (Phase 13)
 
-`calculate_benchmark_statistics` and `compare_agent_evaluations` compute aggregate statistics across $N$ task runs:
-- **Statistical Aggregation**: `mean`, `median`, `min`, `max`, and `success_rate`.
-- **Single-Agent vs Multi-Agent Comparison**: Side-by-side performance delta comparisons (execution time, tool call counts, success rate, iterations).
+- **Execution Trace**: Monotonic event logging (`agent_start`, `tool_call`, `tool_result`, `agent_end`).
+- **Secret Scrubbing**: Automatic redaction (`[REDACTED_SECRET]`) for credentials, API keys (`sk-*`, `ghp_*`), passwords, and private keys.
 
 ---
 
@@ -101,31 +99,11 @@ Evaluation reports are serializable to clean JSON:
 
 ---
 
-## 🛠️ Usage Example
-
-```python
-from app.agent import run_agent
-from app.evaluation import export_report_json
-
-# Execute task with automated telemetry and evaluation report generation
-state = run_agent(goal="Fix return value in math_utils.py", mode="single_agent")
-
-# Access evaluation report
-report = state["evaluation_report"]
-print(f"Task Success: {report['task_success']}")
-print(f"Execution Time: {report['execution_time']}s")
-
-# Export sanitized JSON report to file
-export_report_json(report, file_path="evaluation_report.json")
-```
-
----
-
-## 🧪 Running Tests
+## 🧪 Running Pytest Suite
 
 ```bash
-# Run Phase 13 observability & evaluation test suite
-pytest -v tests/test_evaluation.py
+# Run Phase 14 benchmark test suite
+pytest -v tests/test_benchmark.py
 
 # Run complete project test suite
 pytest -v

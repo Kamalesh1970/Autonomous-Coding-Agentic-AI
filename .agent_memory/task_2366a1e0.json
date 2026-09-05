@@ -1,0 +1,113 @@
+{
+  "version": "1.0",
+  "task_id": "task_2366a1e0",
+  "user_goal": "Fix incorrect addition logic in src/calculator.py where subtract is called instead of add.",
+  "workspace_root": "/tmp/bench_T001_35dvlduz",
+  "status": "paused",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": null,
+  "retry_count": 0,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": null,
+  "commit_created": false,
+  "push_requested": false,
+  "pr_requested": false,
+  "mode": "single_agent",
+  "agent_role": null,
+  "analysis_result": null,
+  "coding_result": null,
+  "review_result": null,
+  "review_status": "pending",
+  "review_feedback": null,
+  "multi_agent_iteration": 0,
+  "max_multi_agent_iterations": 3,
+  "execution_trace": [
+    {
+      "timestamp": 1788627984.62,
+      "event_type": "agent_start",
+      "agent_role": "single_agent",
+      "tool_name": null,
+      "status": "started",
+      "duration": null,
+      "metadata": null
+    },
+    {
+      "timestamp": 1788627984.653,
+      "event_type": "agent_end",
+      "agent_role": "single_agent",
+      "status": "paused",
+      "duration": 0.033,
+      "metadata": null
+    }
+  ],
+  "evaluation_report": {
+    "task_id": "task_2366a1e0",
+    "task_success": false,
+    "final_status": "uncertain",
+    "execution_time": 0.033,
+    "start_time": 1788627984.62,
+    "end_time": 1788627984.653,
+    "tool_call_count": 0,
+    "successful_tool_calls": 0,
+    "failed_tool_calls": 0,
+    "tool_calls_by_tool": {},
+    "iteration_count": 1,
+    "retry_count": 0,
+    "recovery_attempts": 0,
+    "successful_recoveries": 0,
+    "failed_recoveries": 0,
+    "validation_attempts": 0,
+    "validation_passes": 0,
+    "validation_failures": 0,
+    "timeouts": 0,
+    "retrieval_metrics": null,
+    "multi_agent_metrics": null,
+    "human_interventions": 0,
+    "error_count": 0,
+    "error_categories": {},
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null,
+    "events": [
+      {
+        "timestamp": 1788627984.62,
+        "event_type": "agent_start",
+        "agent_role": "single_agent",
+        "tool_name": null,
+        "status": "started",
+        "duration": null,
+        "metadata": null
+      },
+      {
+        "timestamp": 1788627984.653,
+        "event_type": "agent_end",
+        "agent_role": "single_agent",
+        "status": "paused",
+        "duration": 0.033,
+        "metadata": null
+      }
+    ]
+  },
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Fix incorrect addition logic in src/calculator.py where subtract is called instead of add."
+    },
+    {
+      "type": "AIMessage",
+      "content": "Run 1",
+      "tool_calls": []
+    }
+  ]
+}
