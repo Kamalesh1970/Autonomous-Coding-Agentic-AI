@@ -11,6 +11,7 @@ ApprovalStatus = Literal["not_required", "pending", "approved", "rejected"]
 AgentRole = Literal["analyzer", "coder", "reviewer", "orchestrator"]
 ReviewStatus = Literal["approved", "changes_requested", "blocked", "pending"]
 ExecutionMode = Literal["single_agent", "multi_agent"]
+FinalOutcome = Literal["SUCCESS", "FAILED", "ESCALATED"]
 
 
 class AnalysisResult(TypedDict, total=False):
@@ -52,6 +53,7 @@ class EvaluationReport(TypedDict, total=False):
     task_id: str
     task_success: bool
     final_status: str
+    final_outcome: FinalOutcome
     execution_time: float
     start_time: float | None
     end_time: float | None
@@ -206,6 +208,7 @@ class AgentState(TypedDict, total=False):
     max_multi_agent_iterations: int
     execution_trace: list[ExecutionEvent] | None
     evaluation_report: EvaluationReport | None
+    final_outcome: FinalOutcome | None
 
 
 

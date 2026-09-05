@@ -1,110 +1,86 @@
-# Autonomous Coding Agentic AI (Phase 14: Repeatable Benchmark & Experimental Framework)
+# Autonomous Coding Agentic AI (Phase 15: End-to-End Autonomous Agent System)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
-Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/open-swe) as a conceptual benchmark, built from the ground up as a minimal agentic foundation.
+Technical Title: *"An Autonomous Agentic AI System for Repository-Level Software Engineering"*
 
 ---
 
-## 🎯 What is Phase 14?
+## 🎯 What is Phase 15?
 
-Phase 14 builds a **Repeatable Benchmark and Experimental Evaluation Framework** (`app/benchmark.py`) for the Autonomous Coding Agentic AI framework. It enables automated, reproducible software-engineering benchmark task execution against isolated temporary repositories, evaluating task completion, self-correction recovery, retrieval mode impact, single-agent vs multi-agent performance, software quality metrics, and exporting secret-sanitized JSON and CSV reports.
+Phase 15 integrates all capabilities built across Phases 1–14 into a unified, observation-driven **End-to-End Autonomous Agent System**. The framework accepts high-level software engineering goals, understands repository structure, retrieves relevant code context, designs architectural plans, executes code modifications, runs tests, performs self-correction recovery on test failures, verifies goals against concrete repository evidence, enforces human-approval security boundaries, and outputs explicit task outcomes (`SUCCESS`, `FAILED`, `ESCALATED`).
 
 ```text
-  [BENCHMARK TASK]  --->  [ISOLATED TEMP REPO]  --->  [AGENT EXECUTION]  --->  [STATS AGGREGATION]  --->  [JSON & CSV EXPORTS]
+User Goal
+   ↓
+Understand Repository Structure
+   ↓
+Advanced Context Retrieval (Lexical / Semantic / Hybrid)
+   ↓
+Dynamic Architectural Planning & Task Decomposition
+   ↓
+Tool Selection & Safe File Modification
+   ↓
+Automated Testing & Observation
+   ↓
+Failure Diagnosis & Autonomous Self-Correction Retry Loop
+   ↓
+Multi-Agent Code Review (Analyzer → Coder → Reviewer)
+   ↓
+Autonomous Goal Verification
+   ↓
+Human Approval & Git Delivery Boundary
+   ↓
+Final Outcome (SUCCESS / FAILED / ESCALATED)
 ```
 
 ---
 
-## 🏆 Benchmark Tasks & Categories
+## 🏁 Explicit Final Outcome Model
 
-The built-in deterministic benchmark suite (`BUILTIN_BENCHMARK_TASKS`) covers realistic software-engineering tasks across categories and difficulty levels:
+Every task execution produces a unambiguous, explicit final outcome status:
 
-| Category | Task ID | Description | Difficulty |
-| :--- | :--- | :--- | :--- |
-| **Bug Fix** | `T001` | Fix arithmetic operation in `calculator.py`. | `easy` |
-| **Feature Addition** | `T002` | Add new function `multiply()` in `math_ops.py`. | `easy` |
-| **Test Fix** | `T003` | Update `format_name()` implementation to satisfy test assertion. | `easy` |
-| **Repo Understanding** | `T004` | Locate `APP_TIMEOUT` in `config.py` and update usages in `service.py`. | `medium` |
-| **Multi-File Change** | `T005` | Refactor model schema in `models.py` and creation service in `service.py`. | `medium` |
-| **Self-Correction** | `T006` | Fix buggy function in `utils.py` that fails initial test run. | `medium` |
-
----
-
-## 🧪 Experiment Configurations & Repeatable Runs
-
-`ExperimentConfig` supports programmatic matrix experiments:
-- **Agent Modes**: `single_agent`, `multi_agent`.
-- **Retrieval Modes**: `lexical`, `semantic`, `hybrid`.
-- **Repeatable Runs**: `run_count` ($N$ runs) storing distinct `BenchmarkResult` instances.
-- **Reproducibility**: Explicit seed logging (`seed`).
-
----
-
-## 📊 Aggregated Metrics & Exports
-
-| Metric | Calculation | Description |
+| Outcome | Description | Criteria |
 | :--- | :--- | :--- |
-| **Pass@1** | $\text{Success Rate at } \text{run\_index}=1$ | Standard benchmark metric measuring first-pass success. |
-| **Success Rate** | $\frac{\text{Successful Runs}}{\text{Total Runs}}$ | Overall percentage of benchmark runs completing task verification. |
-| **Mean / Median Time** | $\text{mean}(t), \text{median}(t)$ | Execution overhead timing. |
-| **Recovery Rate** | $\frac{\text{Successful Recoveries}}{\text{Recovery Attempts}}$ | Self-correction capability score following test failures. |
-| **Validation Rate** | $\frac{\text{Validation Passes}}{\text{Validation Attempts}}$ | Percentage of pytest executions passing cleanly. |
-
-Evaluation reports and benchmark summaries export to secret-sanitized JSON (`export_benchmark_json`) and CSV (`export_benchmark_csv`).
-
-> [!NOTE]
-> Benchmark results must be generated from actual executions and are not guaranteed to favor any architecture.
+| `SUCCESS` | Task completed & goal satisfied. | Original goal verified (`verify_goal` status is `passed`) or tests passed and goal requirements satisfied. |
+| `FAILED` | Task failed to satisfy goal. | Goal verification failed, tests failed after exhausting retry attempts (`retry_count >= max_retries`), or execution error occurred. |
+| `ESCALATED` | Task requires human approval/intervention. | External delivery action pending human approval (`approval_required=True` with `approval_status="pending"`) or review status is `blocked`. |
 
 ---
 
-## 🛠️ Running Benchmarks via CLI
+## 👥 Execution Modes & Capability Matrix
+
+- **Single-Agent Mode**: Compact, fast reasoning loop for targeted file edits and self-correcting bug fixes.
+- **Multi-Agent Mode**: Specialized role orchestration (`Analyzer` $\rightarrow$ `Coder` $\rightarrow$ `Reviewer` $\rightarrow$ `Orchestrator`) enforcing least-privilege tool subsets.
+
+---
+
+## 🏆 Repeatable Benchmark & Evaluation System (Phases 13 & 14)
+
+- **Deterministic Benchmark Suite**: Built-in benchmark tasks (`BUILTIN_BENCHMARK_TASKS`) across bug fixes, feature additions, test fixes, repository navigation, multi-file edits, and self-correction recovery.
+- **Isolated Repositories**: Executes tasks in temporary isolated sandbox directories with automatic cleanup.
+- **Telemetry & Sanitized Exports**: Exports performance metrics and telemetry traces to JSON (`export_benchmark_json`) and CSV (`export_benchmark_csv`) with 100% credential redaction.
+
+---
+
+## 🛠️ CLI Usage
 
 ```bash
-# Run single-agent benchmark with hybrid retrieval (3 runs)
+# Execute single-agent benchmark suite
 python -m app.benchmark --mode single_agent --retrieval hybrid --runs 3 --export-json results.json --export-csv results.csv
 
-# Run multi-agent benchmark with lexical retrieval
+# Execute multi-agent benchmark suite
 python -m app.benchmark --mode multi_agent --retrieval lexical --runs 1 --export-json multi_results.json
 ```
-
----
-
-## 📊 Observability & Evaluation System (Phase 13)
-
-- **Execution Trace**: Monotonic event logging (`agent_start`, `tool_call`, `tool_result`, `agent_end`).
-- **Secret Scrubbing**: Automatic redaction (`[REDACTED_SECRET]`) for credentials, API keys (`sk-*`, `ghp_*`), passwords, and private keys.
-
----
-
-## 👥 Multi-Agent Architecture (Phase 12)
-
-- **Specialized Roles**: Analyzer (Read-only), Coder (Edits & tests), Reviewer (Read-only quality evaluation), Orchestrator (Iterative routing).
-- **Self-Correcting Review Loop**: Automatic retry on `STATUS: CHANGES_REQUESTED`.
-
----
-
-## 🔍 Advanced Code Retrieval / RAG (Phase 11)
-
-- **Repository-Aware Chunking**: Functions, classes, and logical line sections.
-- **Hybrid Ranking Formula**:
-  $$\text{Final Score} = (\text{Lexical Score} \times 0.4) + (\text{Semantic Score} \times 0.5) + (\text{Metadata Score} \times 0.1)$$
-
----
-
-## 🚦 Human-in-the-Loop Approval & Delivery Model (Phase 10)
-
-- **Actions Requiring Explicit Approval**: `git commit`, `git push`, `create_pull_request`.
-- **Read-Only / Safe Local Actions**: `git_status`, `git_diff`, `retrieve_hybrid_context`.
 
 ---
 
 ## 🧪 Running Pytest Suite
 
 ```bash
-# Run Phase 14 benchmark test suite
-pytest -v tests/test_benchmark.py
+# Run Phase 15 end-to-end integration test suite
+pytest -v tests/test_end_to_end.py
 
-# Run complete project test suite
+# Run complete project test suite (180+ tests)
 pytest -v
 ```

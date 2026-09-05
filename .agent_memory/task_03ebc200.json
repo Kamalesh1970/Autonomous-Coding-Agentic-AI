@@ -1,0 +1,140 @@
+{
+  "version": "1.0",
+  "task_id": "task_03ebc200",
+  "user_goal": "Add sub function to calc.py",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-24/test_e2e_code_modification_tas0",
+  "status": "paused",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [
+    "src/calc.py"
+  ],
+  "validation_result": null,
+  "verification_result": null,
+  "retry_count": 0,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": null,
+  "commit_created": false,
+  "push_requested": false,
+  "pr_requested": false,
+  "mode": "single_agent",
+  "agent_role": null,
+  "analysis_result": null,
+  "coding_result": null,
+  "review_result": null,
+  "review_status": "pending",
+  "review_feedback": null,
+  "multi_agent_iteration": 0,
+  "max_multi_agent_iterations": 3,
+  "execution_trace": [
+    {
+      "timestamp": 1788628728.385,
+      "event_type": "agent_start",
+      "agent_role": "single_agent",
+      "tool_name": null,
+      "status": "started",
+      "duration": null,
+      "metadata": null
+    },
+    {
+      "timestamp": 1788628728.434,
+      "event_type": "agent_end",
+      "agent_role": "single_agent",
+      "status": "paused",
+      "duration": 0.049,
+      "metadata": null
+    }
+  ],
+  "evaluation_report": {
+    "task_id": "task_03ebc200",
+    "task_success": false,
+    "final_status": "uncertain",
+    "final_outcome": "FAILED",
+    "execution_time": 0.049,
+    "start_time": 1788628728.385,
+    "end_time": 1788628728.434,
+    "tool_call_count": 1,
+    "successful_tool_calls": 1,
+    "failed_tool_calls": 0,
+    "tool_calls_by_tool": {
+      "write_file": 1
+    },
+    "iteration_count": 1,
+    "retry_count": 0,
+    "recovery_attempts": 0,
+    "successful_recoveries": 0,
+    "failed_recoveries": 0,
+    "validation_attempts": 0,
+    "validation_passes": 0,
+    "validation_failures": 0,
+    "timeouts": 0,
+    "retrieval_metrics": null,
+    "multi_agent_metrics": null,
+    "human_interventions": 0,
+    "error_count": 0,
+    "error_categories": {},
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null,
+    "events": [
+      {
+        "timestamp": 1788628728.385,
+        "event_type": "agent_start",
+        "agent_role": "single_agent",
+        "tool_name": null,
+        "status": "started",
+        "duration": null,
+        "metadata": null
+      },
+      {
+        "timestamp": 1788628728.434,
+        "event_type": "agent_end",
+        "agent_role": "single_agent",
+        "status": "paused",
+        "duration": 0.049,
+        "metadata": null
+      }
+    ]
+  },
+  "final_outcome": "FAILED",
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Add sub function to calc.py"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Modifying code",
+      "tool_calls": [
+        {
+          "name": "write_file",
+          "args": {
+            "file_path": "src/calc.py",
+            "content": "def add(a, b):\n    return a + b\n\ndef sub(a, b):\n    return a - b\n"
+          },
+          "id": "call_mod_1",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "Successfully wrote file 'src/calc.py' (65 bytes).",
+      "tool_call_id": "call_mod_1",
+      "name": "write_file"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Code modified successfully",
+      "tool_calls": []
+    }
+  ]
+}

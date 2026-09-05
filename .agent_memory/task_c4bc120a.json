@@ -1,0 +1,137 @@
+{
+  "version": "1.0",
+  "task_id": "task_c4bc120a",
+  "user_goal": "Locate add function using hybrid retrieval",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-24/test_e2e_retrieval_integration0",
+  "status": "paused",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": null,
+  "retry_count": 0,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": null,
+  "commit_created": false,
+  "push_requested": false,
+  "pr_requested": false,
+  "mode": "single_agent",
+  "agent_role": null,
+  "analysis_result": null,
+  "coding_result": null,
+  "review_result": null,
+  "review_status": "pending",
+  "review_feedback": null,
+  "multi_agent_iteration": 0,
+  "max_multi_agent_iterations": 3,
+  "execution_trace": [
+    {
+      "timestamp": 1788628730.23,
+      "event_type": "agent_start",
+      "agent_role": "single_agent",
+      "tool_name": null,
+      "status": "started",
+      "duration": null,
+      "metadata": null
+    },
+    {
+      "timestamp": 1788628730.271,
+      "event_type": "agent_end",
+      "agent_role": "single_agent",
+      "status": "paused",
+      "duration": 0.041,
+      "metadata": null
+    }
+  ],
+  "evaluation_report": {
+    "task_id": "task_c4bc120a",
+    "task_success": false,
+    "final_status": "uncertain",
+    "final_outcome": "FAILED",
+    "execution_time": 0.041,
+    "start_time": 1788628730.23,
+    "end_time": 1788628730.271,
+    "tool_call_count": 1,
+    "successful_tool_calls": 1,
+    "failed_tool_calls": 0,
+    "tool_calls_by_tool": {
+      "retrieve_hybrid_context": 1
+    },
+    "iteration_count": 1,
+    "retry_count": 0,
+    "recovery_attempts": 0,
+    "successful_recoveries": 0,
+    "failed_recoveries": 0,
+    "validation_attempts": 0,
+    "validation_passes": 0,
+    "validation_failures": 0,
+    "timeouts": 0,
+    "retrieval_metrics": null,
+    "multi_agent_metrics": null,
+    "human_interventions": 0,
+    "error_count": 0,
+    "error_categories": {},
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null,
+    "events": [
+      {
+        "timestamp": 1788628730.23,
+        "event_type": "agent_start",
+        "agent_role": "single_agent",
+        "tool_name": null,
+        "status": "started",
+        "duration": null,
+        "metadata": null
+      },
+      {
+        "timestamp": 1788628730.271,
+        "event_type": "agent_end",
+        "agent_role": "single_agent",
+        "status": "paused",
+        "duration": 0.041,
+        "metadata": null
+      }
+    ]
+  },
+  "final_outcome": "FAILED",
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Locate add function using hybrid retrieval"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Retrieving code context",
+      "tool_calls": [
+        {
+          "name": "retrieve_hybrid_context",
+          "args": {
+            "query": "add function"
+          },
+          "id": "call_ret",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "=== Retrieved Hybrid Context for Query: 'add function' ===\n\n--- Rank 1 | File: src/calc.py (L1-L2) (function: add) ---\nScores: Final=0.702 (Lexical=0.508, Semantic=0.877, Metadata=0.600)\ndef add(a, b):\n    return a + b\n\n--- Rank 2 | File: tests/test_calc.py (L3-L4) (function: test_add) ---\nScores: Final=0.562 (Lexical=0.533, Semantic=0.579, Metadata=0.600)\ndef test_add():\n    assert add(2, 3) == 5\n\n--- Rank 3 | File: tests/test_calc.py (L1-L2) ---\nScores: Final=0.279 (Lexical=0.158, Semantic=0.432, Metadata=0.000)\nfrom src.calc import add\n",
+      "tool_call_id": "call_ret",
+      "name": "retrieve_hybrid_context"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Context retrieved and processed",
+      "tool_calls": []
+    }
+  ]
+}

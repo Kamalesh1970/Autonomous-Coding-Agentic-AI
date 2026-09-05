@@ -16,26 +16,26 @@ from app.state import AgentState, ExecutionEvent, EvaluationReport
 # Security & Secret Sanitization
 # -----------------------------------------------------------------------------
 SENSITIVE_KEY_PATTERNS = [
-    r"api[_-]?key",
+    r"api[-_]?key",
     r"apikey",
-    r"access[_-]?token",
-    r"auth[_-]?token",
+    r"access[-_]?token",
+    r"auth[-_]?token",
     r"token",
     r"secret",
     r"password",
     r"credential",
     r"auth",
     r"authorization",
-    r"client[_-]?secret",
-    r"private[_-]?key",
+    r"client[-_]?secret",
+    r"private[-_]?key",
     r"bearer",
 ]
 
 SENSITIVE_VALUE_PATTERNS = [
-    r"sk-[a-zA-Z0-9_\-]{5,}",
-    r"ghp_[a-zA-Z0-9_\-]{5,}",
+    r"sk-[a-zA-Z0-9_-]{5,}",
+    r"ghp_[a-zA-Z0-9_-]{5,}",
     r"-----BEGIN PRIVATE KEY-----[^-----]*-----END PRIVATE KEY-----",
-    r"bearer\s+[a-zA-Z0-9_\-\.]+",
+    r"bearer\s+[a-zA-Z0-9_.\-]+",
 ]
 
 
@@ -48,7 +48,7 @@ def sanitize_telemetry_value(value: Any) -> Any:
             text = re.sub(pat, "[REDACTED_SECRET]", text, flags=re.IGNORECASE)
 
         # Scrub key=val or key: val patterns inside string
-        kv_pattern = r"((?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token|secret|password|authorization|client[_-]?secret|private[_-]?key)\s*[:=]\s*['\"]?)([a-zA-Z0-9_\-\.]{3,})"
+        kv_pattern = r"((?:api[-_]?key|apikey|access[-_]?token|auth[-_]?token|secret|password|authorization|client[-_]?secret|private[-_]?key)\s*[:=]\s*['\"]?)([a-zA-Z0-9_.\-]{3,})"
         text = re.sub(kv_pattern, r"\1[REDACTED_SECRET]", text, flags=re.IGNORECASE)
 
         # Truncate overly long content strings
@@ -163,26 +163,45 @@ def generate_evaluation_report(
     t_end = end_time if end_time is not None else time.time()
     exec_time = round(max(0.0, t_end - t_start), 3)
 
-    # Task success calculation
+    # Task success & final outcome calculation
     ver_status = ver_res.get("status") if isinstance(ver_res, dict) else None
     val_status = val_res.get("status") if isinstance(val_res, dict) else None
     state_status = state.get("status")
+    approval_req = bool(state.get("approval_required", False))
+    approval_st = state.get("approval_status", "not_required")
 
-    if ver_status == "passed":
+    if approval_req and approval_st == "pending":
+        task_success = False
+        final_status = "escalated"
+        final_outcome = "ESCALATED"
+    elif state.get("review_status") == "blocked" or state_status == "blocked":
+        task_success = False
+        final_status = "blocked"
+        final_outcome = "ESCALATED"
+    elif ver_status == "passed":
         task_success = True
         final_status = "success"
-    elif state_status == "completed" and val_status == "passed":
+        final_outcome = "SUCCESS"
+    elif ver_status == "failed":
+        task_success = False
+        final_status = "failed"
+        final_outcome = "FAILED"
+    elif state.get("review_status") == "approved":
         task_success = True
         final_status = "success"
+        final_outcome = "SUCCESS"
+    elif state_status == "completed" and val_status in ("passed", None) and ver_status in ("passed", None):
+        task_success = True
+        final_status = "success"
+        final_outcome = "SUCCESS"
     elif state_status == "failed" or val_status in ("failed", "error"):
         task_success = False
         final_status = "failed"
-    elif state_status == "blocked" or state.get("review_status") == "blocked":
-        task_success = False
-        final_status = "blocked"
+        final_outcome = "FAILED"
     else:
         task_success = False
         final_status = "uncertain"
+        final_outcome = "FAILED"
 
     # Analyze message history for tool calls and metrics
     tool_call_count = 0
@@ -277,6 +296,7 @@ def generate_evaluation_report(
         task_id=task_id,
         task_success=task_success,
         final_status=final_status,
+        final_outcome=final_outcome,
         execution_time=exec_time,
         start_time=round(t_start, 3),
         end_time=round(t_end, 3),

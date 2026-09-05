@@ -116,7 +116,7 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
                         raw_tasks = args.get("new_tasks", [])
                         reason = args.get("reason", "Plan revised")
                         plan = revise_plan_state(plan, raw_tasks, reason)
-                elif name == "retrieve_relevant_context":
+                elif name in ("retrieve_relevant_context", "retrieve_hybrid_context") or (name and name.startswith("retrieve_")):
                     query = args.get("query", "")
                     if query and query not in [r.get("query") for r in retrieved_context]:
                         retrieved_context.append({"query": query})
@@ -397,10 +397,20 @@ def run_agent(
     synced_state = sync_plan_from_messages(final_state)
 
     ver_res = synced_state.get("verification_result")
-    if ver_res and ver_res.get("status") == "passed":
+    val_res = synced_state.get("validation_result")
+    app_req = bool(synced_state.get("approval_required", False))
+    app_st = synced_state.get("approval_status", "not_required")
+
+    if app_req and app_st == "pending":
+        synced_state["status"] = "paused"
+    elif ver_res and ver_res.get("status") == "passed":
         synced_state["status"] = "completed"
+    elif ver_res and ver_res.get("status") == "failed":
+        synced_state["status"] = "failed"
+    elif val_res and val_res.get("status") in ("failed", "error") and synced_state.get("retry_count", 0) >= synced_state.get("max_retries", 3):
+        synced_state["status"] = "failed"
     else:
-        synced_state["status"] = "paused" if synced_state.get("status") == "running" else synced_state.get("status", "running")
+        synced_state["status"] = "completed"
 
     t_end = time.time()
     current_trace = synced_state.get("execution_trace") or []
@@ -416,6 +426,7 @@ def run_agent(
 
     report = generate_evaluation_report(synced_state, start_time=t_start, end_time=t_end)
     synced_state["evaluation_report"] = report
+    synced_state["final_outcome"] = report.get("final_outcome", "FAILED")
 
     if task_id:
         try:

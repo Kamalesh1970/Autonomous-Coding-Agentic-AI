@@ -222,6 +222,30 @@ class ExecutionSandbox:
 
         return clean_env
 
+    def execute_command(
+        self,
+        cmd: List[str],
+        cwd: Optional[Union[str, Path]] = None,
+        timeout_seconds: int = 30,
+        max_output_chars: int = 4000,
+        env: Optional[Dict[str, str]] = None,
+    ) -> Dict[str, Any]:
+        """Execute a command within sandbox constraints, returning result dictionary with stdout/stderr/exit_code."""
+        result = self.run_command(
+            cmd=cmd,
+            cwd=cwd,
+            timeout_seconds=timeout_seconds,
+            max_output_chars=max_output_chars,
+            env=env,
+        )
+        if "stdout" not in result:
+            result["stdout"] = result.get("output", "") if result.get("status") == "passed" else ""
+        if "stderr" not in result:
+            result["stderr"] = result.get("output", "") if result.get("status") != "passed" else ""
+        if result.get("exit_code") is None:
+            result["exit_code"] = -1
+        return result
+
     def run_command(
         self,
         cmd: List[str],

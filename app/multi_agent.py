@@ -152,6 +152,16 @@ def analyzer_node(state: AgentState, llm: BaseChatModel, workspace_root: str = "
         user_prompt=user_prompt,
     )
 
+    retrieved = list(state.get("retrieved_context") or [])
+    for msg in history:
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            for tc in msg.tool_calls:
+                t_name = tc.get("name")
+                if t_name in ("retrieve_relevant_context", "retrieve_hybrid_context") or (t_name and t_name.startswith("retrieve_")):
+                    q = tc.get("args", {}).get("query", "")
+                    if q and q not in [r.get("query") for r in retrieved]:
+                        retrieved.append({"query": q})
+
     # Extract affected files if mentioned
     affected_files = list(state.get("modified_files") or [])
     analysis_res: AnalysisResult = {
@@ -164,6 +174,7 @@ def analyzer_node(state: AgentState, llm: BaseChatModel, workspace_root: str = "
     return {
         "agent_role": "analyzer",
         "analysis_result": analysis_res,
+        "retrieved_context": retrieved,
         "messages": [AIMessage(content=f"[Analyzer Node]: {final_text}")],
     }
 
@@ -198,15 +209,21 @@ def coder_node(state: AgentState, llm: BaseChatModel, workspace_root: str = ".")
         user_prompt=user_prompt,
     )
 
-    # Collect modified files from tool messages
+    # Collect modified files and retrieved context from tool messages
     modified = set(state.get("modified_files") or [])
+    retrieved = list(state.get("retrieved_context") or [])
     for msg in history:
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
             for tc in msg.tool_calls:
-                if tc.get("name") in ("write_file", "replace_in_file"):
+                t_name = tc.get("name")
+                if t_name in ("write_file", "replace_in_file"):
                     fp = tc.get("args", {}).get("file_path")
                     if fp:
                         modified.add(fp)
+                elif t_name in ("retrieve_relevant_context", "retrieve_hybrid_context") or (t_name and t_name.startswith("retrieve_")):
+                    q = tc.get("args", {}).get("query", "")
+                    if q and q not in [r.get("query") for r in retrieved]:
+                        retrieved.append({"query": q})
 
     coding_res: CodingResult = {
         "summary": final_text,
@@ -218,6 +235,7 @@ def coder_node(state: AgentState, llm: BaseChatModel, workspace_root: str = ".")
         "agent_role": "coder",
         "coding_result": coding_res,
         "modified_files": list(modified),
+        "retrieved_context": retrieved,
         "messages": [AIMessage(content=f"[Coder Node]: {final_text}")],
     }
 
@@ -435,6 +453,7 @@ def run_multi_agent(
 
     report = generate_evaluation_report(final_state, start_time=t_start, end_time=t_end)
     final_state["evaluation_report"] = report
+    final_state["final_outcome"] = report.get("final_outcome", "FAILED")
 
     if task_id:
         try:

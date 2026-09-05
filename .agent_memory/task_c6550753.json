@@ -1,0 +1,144 @@
+{
+  "version": "1.0",
+  "task_id": "task_c6550753",
+  "user_goal": "Verify criteria",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-25/test_e2e_goal_verification_fai0",
+  "status": "failed",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": {
+    "status": "failed",
+    "summary": "Goal criteria not satisfied",
+    "evidence": [
+      "(No specific evidence items provided)"
+    ]
+  },
+  "retry_count": 1,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": null,
+  "commit_created": false,
+  "push_requested": false,
+  "pr_requested": false,
+  "mode": "single_agent",
+  "agent_role": null,
+  "analysis_result": null,
+  "coding_result": null,
+  "review_result": null,
+  "review_status": "pending",
+  "review_feedback": null,
+  "multi_agent_iteration": 0,
+  "max_multi_agent_iterations": 3,
+  "execution_trace": [
+    {
+      "timestamp": 1788629255.714,
+      "event_type": "agent_start",
+      "agent_role": "single_agent",
+      "tool_name": null,
+      "status": "started",
+      "duration": null,
+      "metadata": null
+    },
+    {
+      "timestamp": 1788629255.774,
+      "event_type": "agent_end",
+      "agent_role": "single_agent",
+      "status": "failed",
+      "duration": 0.059,
+      "metadata": null
+    }
+  ],
+  "evaluation_report": {
+    "task_id": "task_c6550753",
+    "task_success": false,
+    "final_status": "failed",
+    "final_outcome": "FAILED",
+    "execution_time": 0.059,
+    "start_time": 1788629255.714,
+    "end_time": 1788629255.774,
+    "tool_call_count": 1,
+    "successful_tool_calls": 1,
+    "failed_tool_calls": 0,
+    "tool_calls_by_tool": {
+      "verify_goal": 1
+    },
+    "iteration_count": 2,
+    "retry_count": 1,
+    "recovery_attempts": 0,
+    "successful_recoveries": 0,
+    "failed_recoveries": 0,
+    "validation_attempts": 0,
+    "validation_passes": 0,
+    "validation_failures": 0,
+    "timeouts": 0,
+    "retrieval_metrics": null,
+    "multi_agent_metrics": null,
+    "human_interventions": 0,
+    "error_count": 0,
+    "error_categories": {},
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null,
+    "events": [
+      {
+        "timestamp": 1788629255.714,
+        "event_type": "agent_start",
+        "agent_role": "single_agent",
+        "tool_name": null,
+        "status": "started",
+        "duration": null,
+        "metadata": null
+      },
+      {
+        "timestamp": 1788629255.774,
+        "event_type": "agent_end",
+        "agent_role": "single_agent",
+        "status": "failed",
+        "duration": 0.059,
+        "metadata": null
+      }
+    ]
+  },
+  "final_outcome": "FAILED",
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Verify criteria"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Evaluating goal",
+      "tool_calls": [
+        {
+          "name": "verify_goal",
+          "args": {
+            "status": "failed",
+            "summary": "Goal criteria not satisfied"
+          },
+          "id": "c_ver",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "=== Goal Verification Result ===\nStatus: failed\nSummary: Goal criteria not satisfied\nEvidence:\n  • (No specific evidence items provided)",
+      "tool_call_id": "c_ver",
+      "name": "verify_goal"
+    },
+    {
+      "type": "AIMessage",
+      "content": "STATUS: APPROVED\nGoal complete.",
+      "tool_calls": []
+    }
+  ]
+}
