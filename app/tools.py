@@ -4,9 +4,10 @@ import ast
 import os
 import re
 import subprocess
-import sys
 from pathlib import Path
+import sys
 from langchain_core.tools import tool
+from app.sandbox import ExecutionSandbox, SecurityError
 
 
 def safe_resolve_path(workspace_root: str | Path, target_path: str | Path) -> Path:
@@ -22,22 +23,12 @@ def safe_resolve_path(workspace_root: str | Path, target_path: str | Path) -> Pa
     Raises:
         ValueError: If target_path escapes workspace_root.
     """
-    base = Path(workspace_root).resolve()
-    target = Path(target_path)
-
-    if target.is_absolute():
-        resolved = target.resolve()
-    else:
-        resolved = (base / target).resolve()
-
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
     try:
-        resolved.relative_to(base)
-    except ValueError:
-        raise ValueError(
-            f"Access denied: path '{target_path}' escapes workspace directory '{base}'"
-        )
+        return sandbox.safe_resolve_path(target_path)
+    except SecurityError as err:
+        raise ValueError(str(err)) from err
 
-    return resolved
 
 
 def _is_binary_file(file_path: Path) -> bool:
@@ -102,30 +93,9 @@ def _list_files_impl(directory: str = ".", workspace_root: str = ".", max_files:
 
 def _read_file_impl(file_path: str, workspace_root: str = ".", max_bytes: int = 100_000) -> str:
     """Implementation of reading file content within a safe workspace root."""
-    try:
-        resolved_file = safe_resolve_path(workspace_root, file_path)
-    except ValueError as err:
-        return f"Error: {err}"
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.read_file(file_path=file_path, max_bytes=max_bytes)
 
-    if not resolved_file.exists():
-        return f"Error: File '{file_path}' does not exist."
-
-    if not resolved_file.is_file():
-        return f"Error: Path '{file_path}' is a directory, not a file."
-
-    if _is_binary_file(resolved_file):
-        return f"Error: File '{file_path}' appears to be binary and cannot be read as text."
-
-    try:
-        file_size = resolved_file.stat().st_size
-        text = resolved_file.read_text(encoding="utf-8", errors="replace")
-
-        if file_size > max_bytes:
-            text = text[:max_bytes] + f"\n... (truncated file content at {max_bytes} bytes)"
-
-        return text
-    except Exception as exc:
-        return f"Error reading file '{file_path}': {str(exc)}"
 
 
 def _search_code_impl(query: str, directory: str = ".", workspace_root: str = ".", max_matches: int = 100) -> str:
@@ -399,54 +369,14 @@ def _retrieve_relevant_context_impl(
 # -----------------------------------------------------------------------------
 def _write_file_impl(file_path: str, content: str, workspace_root: str = ".") -> str:
     """Safe writing/creation of repository files with workspace root boundary protection."""
-    try:
-        resolved_file = safe_resolve_path(workspace_root, file_path)
-    except ValueError as err:
-        return f"Error: {err}"
-
-    try:
-        resolved_file.parent.mkdir(parents=True, exist_ok=True)
-        resolved_file.write_text(content, encoding="utf-8")
-        byte_len = len(content.encode("utf-8"))
-        return f"Successfully wrote file '{file_path}' ({byte_len} bytes)."
-    except Exception as exc:
-        return f"Error writing file '{file_path}': {str(exc)}"
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.write_file(file_path=file_path, content=content)
 
 
 def _replace_in_file_impl(file_path: str, old_text: str, new_text: str, workspace_root: str = ".") -> str:
     """Targeted unique text replacement inside repository files with safety checks."""
-    try:
-        resolved_file = safe_resolve_path(workspace_root, file_path)
-    except ValueError as err:
-        return f"Error: {err}"
-
-    if not resolved_file.exists():
-        return f"Error: File '{file_path}' does not exist."
-
-    if not resolved_file.is_file():
-        return f"Error: Path '{file_path}' is a directory, not a file."
-
-    if _is_binary_file(resolved_file):
-        return f"Error: File '{file_path}' appears to be binary and cannot be edited as text."
-
-    try:
-        content = resolved_file.read_text(encoding="utf-8", errors="replace")
-
-        if old_text not in content:
-            return f"Error: Target text to replace was not found in '{file_path}'."
-
-        count = content.count(old_text)
-        if count > 1:
-            return (
-                f"Error: Ambiguous replacement target. Found {count} occurrences of target text "
-                f"in '{file_path}'. Please provide more unique surrounding context."
-            )
-
-        new_content = content.replace(old_text, new_text, 1)
-        resolved_file.write_text(new_content, encoding="utf-8")
-        return f"Successfully replaced target text in '{file_path}'."
-    except Exception as exc:
-        return f"Error editing file '{file_path}': {str(exc)}"
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.replace_in_file(file_path=file_path, old_text=old_text, new_text=new_text)
 
 
 # -----------------------------------------------------------------------------
@@ -459,78 +389,34 @@ def _run_tests_impl(
     max_output_chars: int = 4000,
 ) -> str:
     """Safely execute pytest validation tests inside workspace root with timeout and output bounding."""
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
     try:
-        resolved_dir = safe_resolve_path(workspace_root, target_directory)
-    except ValueError as err:
+        resolved_dir = sandbox.safe_resolve_path(target_directory)
+    except (ValueError, SecurityError) as err:
         return f"Error: {err}"
 
     if not resolved_dir.exists():
         return f"Error: Target directory '{target_directory}' does not exist."
 
     cmd = [sys.executable, "-B", "-m", "pytest", "-o", "dont_write_bytecode=True"]
-    env = dict(os.environ)
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    res = sandbox.run_command(
+        cmd=cmd,
+        cwd=resolved_dir,
+        timeout_seconds=timeout_seconds,
+        max_output_chars=max_output_chars,
+    )
 
-    try:
-        res = subprocess.run(
-            cmd,
-            cwd=resolved_dir,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            check=False,
-            env=env,
-        )
+    exit_code_str = "null" if res.get("exit_code") is None else str(res["exit_code"])
+    return (
+        f"=== Test Execution Result ===\n"
+        f"Status: {res['status']}\n"
+        f"Exit Code: {exit_code_str}\n"
+        f"Summary: {res['summary']}\n"
+        f"Output:\n----------------------------------------\n"
+        f"{res['output']}\n"
+        f"----------------------------------------"
+    )
 
-        exit_code = res.returncode
-        status = "passed" if exit_code == 0 else "failed"
-        summary = (
-            "All tests passed successfully."
-            if exit_code == 0
-            else f"Test validation failed with exit code {exit_code}."
-        )
-
-        combined_output = (res.stdout + "\n" + res.stderr).strip()
-        if len(combined_output) > max_output_chars:
-            combined_output = (
-                combined_output[:max_output_chars]
-                + f"\n... (test output truncated at {max_output_chars} characters)"
-            )
-
-        return (
-            f"=== Test Execution Result ===\n"
-            f"Status: {status}\n"
-            f"Exit Code: {exit_code}\n"
-            f"Summary: {summary}\n"
-            f"Output:\n----------------------------------------\n"
-            f"{combined_output}\n"
-            f"----------------------------------------"
-        )
-
-    except subprocess.TimeoutExpired as exc:
-        output_text = (exc.stdout or "") if isinstance(exc.stdout, str) else ""
-        if len(output_text) > max_output_chars:
-            output_text = output_text[:max_output_chars] + f"\n... (truncated)"
-
-        return (
-            f"=== Test Execution Result ===\n"
-            f"Status: timeout\n"
-            f"Exit Code: null\n"
-            f"Summary: Test execution timed out after {timeout_seconds} seconds.\n"
-            f"Output:\n----------------------------------------\n"
-            f"TimeoutExpired: Process killed after exceeding {timeout_seconds}s limit.\n{output_text}\n"
-            f"----------------------------------------"
-        )
-    except Exception as exc:
-        return (
-            f"=== Test Execution Result ===\n"
-            f"Status: error\n"
-            f"Exit Code: null\n"
-            f"Summary: Error executing validation command.\n"
-            f"Output:\n----------------------------------------\n"
-            f"{str(exc)}\n"
-            f"----------------------------------------"
-        )
 
 
 # -----------------------------------------------------------------------------

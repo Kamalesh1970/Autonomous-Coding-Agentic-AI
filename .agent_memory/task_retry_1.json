@@ -2,7 +2,7 @@
   "version": "1.0",
   "task_id": "task_retry_1",
   "user_goal": "Fix flaky test",
-  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-10/test_retry_count_survives_resu0",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-12/test_retry_count_survives_resu0",
   "status": "running",
   "plan": null,
   "retrieved_context": [],
