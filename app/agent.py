@@ -1,11 +1,11 @@
-"""LangGraph Agent Loop for Phase 1 Autonomous Coding Agent."""
+"""LangGraph Agent Loop for Phase 2 Read-Only Repository Understanding Agent."""
 
 import os
 import sys
 from typing import Literal
 from dotenv import load_dotenv
 
-from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
@@ -13,6 +13,14 @@ from langgraph.prebuilt import ToolNode
 
 from app.state import AgentState
 from app.tools import create_workspace_tools
+
+
+SYSTEM_PROMPT = (
+    "You are an autonomous software engineering assistant inspecting a local Git repository. "
+    "You are in READ-ONLY mode. Use your available tools (list_files, read_file, search_code, "
+    "git_status, git_diff) to analyze the repository structure, code implementation, and git state. "
+    "Reason step-by-step and produce a clear, context-aware answer when done."
+)
 
 
 def get_default_llm() -> BaseChatModel:
@@ -31,7 +39,7 @@ def get_default_llm() -> BaseChatModel:
 
 
 def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = "."):
-    """Constructs and compiles the LangGraph single-agent loop.
+    """Constructs and compiles the Phase 2 LangGraph single-agent loop.
 
     Args:
         llm: Optional chat model instance. Defaults to ChatOpenAI configured via env.
@@ -51,11 +59,17 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
         messages = list(state.get("messages", []))
         user_goal = state.get("user_goal", "")
 
-        # If no messages exist yet, seed with user goal
-        if not messages and user_goal:
-            messages = [HumanMessage(content=user_goal)]
+        # Prepare payload with SystemMessage upfront if not already present
+        input_messages = []
+        if not any(isinstance(m, SystemMessage) for m in messages):
+            input_messages.append(SystemMessage(content=SYSTEM_PROMPT))
 
-        response = llm_with_tools.invoke(messages)
+        if not messages and user_goal:
+            input_messages.append(HumanMessage(content=user_goal))
+        else:
+            input_messages.extend(messages)
+
+        response = llm_with_tools.invoke(input_messages)
 
         if not state.get("messages") and user_goal:
             return {"messages": [HumanMessage(content=user_goal), response]}
