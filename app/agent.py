@@ -1,4 +1,4 @@
-"""LangGraph Agent Loop for Phase 2 Read-Only Repository Understanding Agent."""
+"""LangGraph Agent Loop for Phase 3 Planning and Task Decomposition Agent."""
 
 import os
 import sys
@@ -11,15 +11,25 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
-from app.state import AgentState
+from app.state import (
+    AgentState,
+    create_plan_state,
+    update_task_state,
+    revise_plan_state,
+)
 from app.tools import create_workspace_tools
 
 
 SYSTEM_PROMPT = (
-    "You are an autonomous software engineering assistant inspecting a local Git repository. "
-    "You are in READ-ONLY mode. Use your available tools (list_files, read_file, search_code, "
-    "git_status, git_diff) to analyze the repository structure, code implementation, and git state. "
-    "Reason step-by-step and produce a clear, context-aware answer when done."
+    "You are an autonomous software engineering assistant equipped with repository inspection "
+    "and dynamic planning tools. You are in READ-ONLY mode.\n\n"
+    "When given a software engineering goal:\n"
+    "1. Inspect the repository if initial context is needed.\n"
+    "2. Decompose complex goals into structured subtasks using `create_plan` with explicit dependencies.\n"
+    "3. Track progress using `update_task_status(task_id, status)` as you execute tasks.\n"
+    "4. If new repository observations contradict your assumptions or require strategy changes, "
+    "revise your plan using `revise_plan(new_tasks, reason)`.\n"
+    "5. Conclude with a comprehensive context-aware response when all tasks are complete."
 )
 
 
@@ -38,8 +48,38 @@ def get_default_llm() -> BaseChatModel:
     return ChatOpenAI(model=model_name, temperature=0)
 
 
+def sync_plan_from_messages(state: AgentState) -> AgentState:
+    """Helper to update state['plan'] based on planning tool calls in the conversation."""
+    messages = state.get("messages", [])
+    plan = state.get("plan")
+    user_goal = state.get("user_goal", "")
+
+    for msg in messages:
+        if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            for tc in msg.tool_calls:
+                name = tc.get("name")
+                args = tc.get("args", {})
+                if name == "create_plan":
+                    raw_tasks = args.get("tasks", [])
+                    plan = create_plan_state(user_goal, raw_tasks)
+                elif name == "update_task_status":
+                    if plan:
+                        tid = args.get("task_id", "")
+                        st = args.get("status", "pending")
+                        plan = update_task_state(plan, tid, st)
+                elif name == "revise_plan":
+                    if plan:
+                        raw_tasks = args.get("new_tasks", [])
+                        reason = args.get("reason", "Plan revised")
+                        plan = revise_plan_state(plan, raw_tasks, reason)
+
+    updated_state = dict(state)
+    updated_state["plan"] = plan
+    return updated_state  # type: ignore
+
+
 def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = "."):
-    """Constructs and compiles the Phase 2 LangGraph single-agent loop.
+    """Constructs and compiles the Phase 3 LangGraph planning agent loop.
 
     Args:
         llm: Optional chat model instance. Defaults to ChatOpenAI configured via env.
@@ -55,11 +95,11 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
     llm_with_tools = llm.bind_tools(tools)
 
     def reason_node(state: AgentState) -> dict:
-        """Reasoning node that invokes the model with accumulated messages."""
+        """Reasoning node that invokes the model with accumulated messages and plan context."""
+        state = sync_plan_from_messages(state)
         messages = list(state.get("messages", []))
         user_goal = state.get("user_goal", "")
 
-        # Prepare payload with SystemMessage upfront if not already present
         input_messages = []
         if not any(isinstance(m, SystemMessage) for m in messages):
             input_messages.append(SystemMessage(content=SYSTEM_PROMPT))
@@ -71,9 +111,14 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
 
         response = llm_with_tools.invoke(input_messages)
 
+        res_dict = {"messages": [response]}
+        if state.get("plan"):
+            res_dict["plan"] = state["plan"]
+
         if not state.get("messages") and user_goal:
-            return {"messages": [HumanMessage(content=user_goal), response]}
-        return {"messages": [response]}
+            res_dict["messages"] = [HumanMessage(content=user_goal), response]
+
+        return res_dict
 
     tool_node = ToolNode(tools)
 
@@ -84,8 +129,6 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
             return END
 
         last_message = messages[-1]
-
-        # Check if the AI requested any tool calls
         if isinstance(last_message, AIMessage) and getattr(last_message, "tool_calls", None):
             return "tools"
 
@@ -111,16 +154,18 @@ def run_agent(goal: str, workspace_root: str = ".", llm: BaseChatModel | None = 
         llm: Optional chat model (useful for passing mocked LLMs in tests).
 
     Returns:
-        Final state dictionary containing the conversation messages and history.
+        Final state dictionary containing conversation history and plan.
     """
     graph = build_agent_graph(llm=llm, workspace_root=workspace_root)
     initial_state = {
         "user_goal": goal,
         "workspace_root": workspace_root,
         "messages": [HumanMessage(content=goal)],
+        "plan": None,
     }
 
-    return graph.invoke(initial_state)
+    final_state = graph.invoke(initial_state)
+    return sync_plan_from_messages(final_state)
 
 
 def main():
@@ -139,6 +184,8 @@ def main():
     try:
         final_state = run_agent(goal=goal, workspace_root=workspace_root)
         messages = final_state.get("messages", [])
+        plan = final_state.get("plan")
+
         print("\n=== Agent Trace ===")
         for msg in messages:
             role = msg.__class__.__name__
@@ -146,7 +193,7 @@ def main():
             tool_calls = getattr(msg, "tool_calls", None)
 
             if role == "HumanMessage":
-                print(f"\n[User]: {content}")
+                print(f"\n[User Goal]: {content}")
             elif role == "AIMessage":
                 print(f"\n[Agent]: {content}")
                 if tool_calls:
@@ -154,6 +201,17 @@ def main():
                         print(f"  → Tool Call: {tc.get('name')}({tc.get('args')})")
             elif role == "ToolMessage":
                 print(f"\n[Observation]:\n{content}")
+
+        if plan:
+            print("\n=== Final Plan State ===")
+            print(f"Goal: {plan.get('goal')}")
+            print(f"Revision Count: {plan.get('revision_count', 0)}")
+            if plan.get("revision_reason"):
+                print(f"Revision Reason: {plan.get('revision_reason')}")
+            print("Tasks:")
+            for t in plan.get("tasks", []):
+                deps = f" (deps: {t.get('dependencies')})" if t.get("dependencies") else ""
+                print(f"  [{t.get('status').upper()}] {t.get('id')}: {t.get('title')}{deps}")
 
     except Exception as exc:
         print(f"\nError executing agent: {exc}")

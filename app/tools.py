@@ -1,4 +1,4 @@
-"""Minimal safe read-only repository tools for Phase 2 Autonomous Coding Agent."""
+"""Minimal safe read-only repository and planning tools for Phase 3 Autonomous Coding Agent."""
 
 import os
 import subprocess
@@ -65,7 +65,6 @@ def _list_files_impl(directory: str = ".", workspace_root: str = ".", max_files:
 
     try:
         for root, dirs, files in os.walk(resolved_dir, followlinks=False):
-            # Skip .git directory internals
             if ".git" in dirs:
                 dirs.remove(".git")
             if "__pycache__" in dirs:
@@ -199,7 +198,7 @@ def _git_status_impl(workspace_root: str = ".") -> str:
         )
         if res.returncode != 0:
             return f"Git Error: {res.stderr.strip() or 'Not a git repository.'}"
-        
+
         output = res.stdout.strip()
         return output if output else "Git repository is clean. No changes."
     except Exception as exc:
@@ -210,7 +209,6 @@ def _git_diff_impl(workspace_root: str = ".", max_lines: int = 200) -> str:
     """Implementation of read-only git diff inspection."""
     base = Path(workspace_root).resolve()
     try:
-        # Unstaged diff
         res_unstaged = subprocess.run(
             ["git", "diff"],
             cwd=base,
@@ -218,7 +216,6 @@ def _git_diff_impl(workspace_root: str = ".", max_lines: int = 200) -> str:
             text=True,
             check=False,
         )
-        # Staged diff
         res_staged = subprocess.run(
             ["git", "diff", "--staged"],
             cwd=base,
@@ -249,9 +246,12 @@ def _git_diff_impl(workspace_root: str = ".", max_lines: int = 200) -> str:
         return f"Error executing git diff: {str(exc)}"
 
 
+# -----------------------------------------------------------------------------
+# Standalone Read-Only Repository Tools
+# -----------------------------------------------------------------------------
 @tool
 def list_files(directory: str = ".") -> str:
-    """List files and subdirectories recursively within the controlled workspace directory.
+    """List files recursively within the controlled workspace directory.
 
     Args:
         directory: Relative path of the directory to list (defaults to ".").
@@ -309,8 +309,72 @@ def git_diff() -> str:
     return _git_diff_impl(workspace_root=".")
 
 
+# -----------------------------------------------------------------------------
+# Standalone Planning Tools
+# -----------------------------------------------------------------------------
+@tool
+def create_plan(tasks: list[dict]) -> str:
+    """Initialize an execution plan with subtasks, titles, descriptions, and dependency IDs.
+
+    Args:
+        tasks: List of task dictionaries (keys: 'id', 'title', 'description', 'dependencies').
+
+    Returns:
+        Formatted plan confirmation observation.
+    """
+    formatted = []
+    for idx, t in enumerate(tasks, start=1):
+        tid = t.get("id", f"task-{idx}")
+        title = t.get("title", f"Task {idx}")
+        deps = t.get("dependencies", [])
+        dep_str = f" [Depends on: {', '.join(deps)}]" if deps else ""
+        formatted.append(f"• [{tid}] {title}{dep_str} - Status: pending")
+
+    return f"Execution plan initialized with {len(tasks)} subtasks:\n" + "\n".join(formatted)
+
+
+@tool
+def update_task_status(task_id: str, status: str, notes: str = "") -> str:
+    """Update the status of a specific task in the execution plan.
+
+    Args:
+        task_id: Unique task identifier (e.g. 'task-1').
+        status: New status ('pending', 'in_progress', 'completed', 'failed', 'blocked').
+        notes: Optional explanation or notes about the status update.
+
+    Returns:
+        Status update confirmation observation.
+    """
+    note_str = f" Notes: {notes}" if notes else ""
+    return f"Task '{task_id}' status updated to '{status}'.{note_str}"
+
+
+@tool
+def revise_plan(new_tasks: list[dict], reason: str) -> str:
+    """Modify or replace remaining plan tasks based on new evidence observed in the repository.
+
+    Args:
+        new_tasks: List of updated task dictionaries.
+        reason: Explanation of why the plan is being revised.
+
+    Returns:
+        Plan revision confirmation observation.
+    """
+    formatted = []
+    for idx, t in enumerate(new_tasks, start=1):
+        tid = t.get("id", f"task-{idx}")
+        title = t.get("title", f"Task {idx}")
+        st = t.get("status", "pending")
+        formatted.append(f"• [{tid}] {title} - Status: {st}")
+
+    return (
+        f"Execution plan revised ({len(new_tasks)} tasks). Reason: '{reason}'\n"
+        + "\n".join(formatted)
+    )
+
+
 def create_workspace_tools(workspace_root: str = "."):
-    """Create read-only tool instances bound to a specific workspace root directory.
+    """Create read-only repository tools and planning tools bound to a workspace root.
 
     Args:
         workspace_root: Path to the root workspace directory.
@@ -374,4 +438,13 @@ def create_workspace_tools(workspace_root: str = "."):
         """
         return _git_diff_impl(workspace_root=workspace_root)
 
-    return [list_files, read_file, search_code, git_status, git_diff]
+    return [
+        list_files,
+        read_file,
+        search_code,
+        git_status,
+        git_diff,
+        create_plan,
+        update_task_status,
+        revise_plan,
+    ]
