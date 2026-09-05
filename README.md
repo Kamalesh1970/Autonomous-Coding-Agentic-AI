@@ -1,4 +1,4 @@
-# Autonomous Coding Agentic AI (Phase 6: Testing & Self-Correction)
+# Autonomous Coding Agentic AI (Phase 8: Persistent Memory & Long-Running Agent State)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
@@ -6,13 +6,28 @@ Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/o
 
 ---
 
-## 🎯 What is Phase 6?
+## 🎯 What is Phase 8?
 
-Phase 6 equips the agent with autonomous **Testing, Debugging, Failure Diagnosis, and Recovery** capabilities (`run_tests`). The agent implements the core self-correction loop:
+Phase 8 equips the agent with **Persistent Memory and Long-Running Agent State** capabilities (`save_state`, `load_state`, `resume_agent`). The agent can:
 
-$$\text{ACT} \longrightarrow \text{OBSERVE} \longrightarrow \text{EVALUATE} \longrightarrow \text{RECOVER} \longrightarrow \text{RETRY}$$
+1. Start a long-running software engineering task.
+2. Execute agentic reasoning, planning, code modification, and validation steps.
+3. Automatically persist structured execution state to disk (`.agent_memory/<task_id>.json`).
+4. Survive process stops, interruptions, or crashes.
+5. Resume execution via `resume_agent(task_id)` without losing the original user goal, task plan progress, modified files, validation results, verification results, or recovery `retry_count`.
 
-When validation tests fail, the agent observes error tracebacks/assertions, retrieves relevant code context, applies targeted fixes (`replace_in_file`), verifies git changes (`git_diff`), and re-runs validation until tests pass or the max retry limit is reached.
+The agentic lifecycle for Phase 8 is:
+
+$$\text{GOAL} \longrightarrow \text{PLAN} \longrightarrow \text{ACT} \longrightarrow \text{PERSIST STATE} \longrightarrow \text{[ INTERRUPT / STOP ]} \longrightarrow \text{RESUME} \longrightarrow \text{VALIDATE} \longrightarrow \text{VERIFY} \longrightarrow \text{COMPLETE}$$
+
+---
+
+## 💾 Persistent Execution Memory ($\text{Memory} \neq \text{RAG / Vector DB}$)
+
+- **Persistent Execution Memory (`app/memory.py`)**: Stores JSON-safe task execution state (`task_id`, `user_goal`, `workspace_root`, `plan`, `retrieved_context`, `modified_files`, `validation_result`, `verification_result`, `retry_count`, `max_retries`, `status`, `messages`).
+- **Atomic Persistence**: Writes to a temporary `.tmp` file and replaces the destination JSON file atomically using `os.replace` to prevent state corruption.
+- **Path Traversal Security**: Strict task ID validation (`^[a-zA-Z0-9_-]+$`) prevents path traversal attacks outside `.agent_memory`.
+- **Runtime Cleanliness**: Deliberately omits non-serializable objects (LLM instances, active subprocesses, tool callbacks) and secret environment keys.
 
 ---
 
@@ -22,7 +37,7 @@ A simple LLM tool merely generates code once.
 
 This agentic AI operates in an **environmental feedback loop**:
 ```
-User Goal
+User Goal (or Resumed Task ID)
    │
    ▼
 [ Plan & Retrieve Context ]
@@ -31,25 +46,27 @@ User Goal
 [ Modify Repository Code ] (write_file / replace_in_file)
    │
    ▼
-[ Inspect Git Diff ] (git_diff)
+[ Checkpoint State to Disk ] (atomic save to .agent_memory/<task_id>.json)
    │
    ▼
-[ Run Automated Tests ] (run_tests: pytest)
+[ Run Automated Tests ] (run_tests: pytest) ───► (Validation)
    │
-   ├────────► [ PASS ] ──────────────────────► [ Complete Goal ]
-   │
-   ▼ (FAIL / Traceback Observation)
-[ Diagnose Error & Retrieve ]
-   │
-   ▼
-[ Apply Corrective Fix ] ───► (Re-run Tests: RETRY loop up to max_retries)
+   ├────────► [ PASS ] ───► [ Inspect Repository Evidence ]
+   │                              │
+   │                              ▼
+   │                      [ Verify Goal ] (verify_goal: passed / failed / uncertain)
+   │                              │
+   │                              ├────────► [ PASSED ] ───► [ Complete Goal ]
+   │                              │
+   ▼ (FAIL Traceback)             ▼ (FAILED / UNCERTAIN Evidence)
+[ Diagnose Error & Retrieve ] ────┴────► [ Apply Fix & Recovery ] ───► (RETRY loop)
 ```
 
 ---
 
-## 🛠️ Tool Layer (Inspection + Retrieval + Editing + Validation + Planning)
+## 🛠️ Tool & Memory Layer
 
-All tools enforce strict repository boundary protection:
+All tools enforce strict repository and memory storage boundary protection:
 
 1. `list_files(directory=".")`: Recursively lists relative file paths in workspace.
 2. `read_file(file_path)`: Reads text file content with line/byte limits and binary file detection.
@@ -59,15 +76,17 @@ All tools enforce strict repository boundary protection:
 6. `retrieve_relevant_context(query, directory=".")`: Ranks relevant files and returns surrounding code context snippets.
 7. `write_file(file_path, content)`: Safely creates or overwrites repository files.
 8. `replace_in_file(file_path, old_text, new_text)`: Targeted unique text replacement (fails safely if missing or ambiguous).
-9. `run_tests(target_directory=".", timeout_seconds=30)`: **[NEW]** Executes pytest validation inside workspace with process timeout protection and bounded output.
-10. `create_plan(tasks)`: Decomposes goal into structured subtasks with dependencies.
-11. `update_task_status(task_id, status, notes)`: Updates task status.
-12. `revise_plan(new_tasks, reason)`: Dynamically modifies remaining tasks based on new findings.
+9. `run_tests(target_directory=".", timeout_seconds=30)`: Safe pytest execution inside workspace with process timeout protection.
+10. `verify_goal(status, summary, evidence)`: Evaluates whether the original user goal is satisfied based on repository evidence (`passed`, `failed`, `uncertain`).
+11. `create_plan(tasks)`: Decomposes goal into structured subtasks with dependencies.
+12. `update_task_status(task_id, status, notes)`: Updates task status.
+13. `revise_plan(new_tasks, reason)`: Dynamically modifies remaining tasks based on new findings.
+14. **Memory API (`app/memory.py`)**: `save_state`, `load_state`, `delete_state`, `safe_resolve_task_memory_path`.
 
-### 🛡️ Execution & Boundary Protection
-- ❌ `run_tests` executes strictly `python3 -m pytest` inside `workspace_root` with process timeout protection (default 30s) and bounded output (max 4,000 chars).
-- ❌ No unrestricted arbitrary shell execution tool (`execute_shell`) is exposed.
-- ❌ `retry_count` prevents infinite recovery loops (max 3 retries by default).
+### 🛡️ Execution & Memory Protection
+- ❌ State serialization excludes secrets, API keys, runtime handles, and open subprocesses.
+- ❌ Task IDs are restricted to alphanumeric characters, hyphens, and underscores to block path traversal (`../../`).
+- ❌ `retry_count` is preserved on task resume to enforce retry limits across process restarts.
 
 ---
 
@@ -105,19 +124,26 @@ OPENAI_API_KEY=your_actual_api_key
 OPENAI_MODEL_NAME=gpt-4o-mini
 ```
 
-Run the agent on a bug fix / validation goal:
+Run a new task:
 ```bash
 python3 -m app.agent "Fix the multiply function so that the project's tests pass." .
+```
+
+Resume an existing task from memory:
+```python
+from app.agent import resume_agent
+
+final_state = resume_agent(task_id="task_abc123")
 ```
 
 ---
 
 ## 🚧 Intentionally NOT Implemented (Reserved for Future Phases)
 
-To keep Phase 6 strictly focused on autonomous testing, debugging, and recovery loops, the following components are intentionally omitted:
+To keep Phase 8 strictly focused on persistent execution state, the following components are intentionally omitted:
 
 - ❌ Unrestricted shell execution
 - ❌ Docker / cloud sandbox infrastructure
 - ❌ GitHub API / branch creation / commits / pushes / PRs
-- ❌ Vector databases / RAG / Qdrant
+- ❌ Vector databases / RAG / Qdrant / Pinecone / Chroma
 - ❌ Multi-agent systems / MCP / Observability platforms

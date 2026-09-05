@@ -5,7 +5,13 @@ import sys
 from typing import Literal
 from dotenv import load_dotenv
 
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
+from langchain_core.messages import (
+    HumanMessage,
+    AIMessage,
+    SystemMessage,
+    BaseMessage,
+    ToolMessage,
+)
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
@@ -17,13 +23,15 @@ from app.state import (
     update_task_state,
     revise_plan_state,
     ValidationResult,
+    VerificationResult,
 )
 from app.tools import create_workspace_tools
+from app.memory import save_state, load_state, delete_state
 
 
 SYSTEM_PROMPT = (
     "You are an autonomous software engineering assistant equipped with repository inspection, "
-    "context retrieval, dynamic planning, safe code editing, and automated testing tools.\n\n"
+    "context retrieval, dynamic planning, safe code editing, automated testing, and goal verification tools.\n\n"
     "When given a software engineering goal or bug fix task:\n"
     "1. Decompose goals into structured subtasks using `create_plan` with explicit dependencies.\n"
     "2. Use `retrieve_relevant_context(query)` or `read_file(file_path)` to locate relevant code context.\n"
@@ -31,11 +39,16 @@ SYSTEM_PROMPT = (
     "4. Inspect repository changes with `git_diff()`.\n"
     "5. IMPERATIVE VALIDATION & SELF-CORRECTION LOOP:\n"
     "   - Execute validation tests using `run_tests()`.\n"
-    "   - If tests pass (`Status: passed`), mark task completed.\n"
     "   - If tests fail (`Status: failed`), observe error tracebacks/assertions, diagnose the root cause, "
     "apply a corrective fix with `replace_in_file`, inspect `git_diff()`, and re-run `run_tests()`.\n"
-    "   - Stop retrying if recovery attempts reach max retries.\n"
-    "6. Conclude with a comprehensive context-aware response when all tasks pass validation."
+    "6. AUTONOMOUS GOAL VERIFICATION:\n"
+    "   - Passing tests (`run_tests`) ALONE does not mean the user's goal is complete.\n"
+    "   - Inspect repository evidence (e.g. read_file, search_code, git_diff) to check whether the original "
+    "user goal has actually been satisfied.\n"
+    "   - Invoke `verify_goal(status, summary, evidence)` where status is 'passed', 'failed', or 'uncertain'.\n"
+    "   - If verification fails or is uncertain, diagnose missing requirements, apply fixes, and re-test/re-verify, "
+    "respecting max retries.\n"
+    "7. Conclude with a comprehensive response when all tasks pass validation and goal verification passes."
 )
 
 
@@ -55,14 +68,18 @@ def get_default_llm() -> BaseChatModel:
 
 
 def sync_plan_from_messages(state: AgentState) -> AgentState:
-    """Helper to update state plan, retrieved context, modified files, and validation results."""
+    """Helper to update state plan, retrieved context, modified files, validation, and goal verification results."""
     messages = state.get("messages", [])
     plan = state.get("plan")
     user_goal = state.get("user_goal", "")
+    task_id = state.get("task_id", "")
+    status_val = state.get("status", "running")
     retrieved_context = list(state.get("retrieved_context") or [])
     modified_files = list(state.get("modified_files") or [])
     validation_result = state.get("validation_result")
-    retry_count = 0
+    verification_result = state.get("verification_result")
+    existing_retry_count = int(state.get("retry_count", 0))
+    failed_tool_messages = 0
     max_retries = state.get("max_retries", 3)
 
     for msg in messages:
@@ -92,7 +109,7 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
                     if fp and fp not in modified_files:
                         modified_files.append(fp)
 
-        elif msg.__class__.__name__ == "ToolMessage":
+        elif isinstance(msg, ToolMessage) or msg.__class__.__name__ == "ToolMessage":
             content = getattr(msg, "content", "")
             if "=== Test Execution Result ===" in content:
                 status = "passed" if "Status: passed" in content else ("failed" if "Status: failed" in content else ("timeout" if "Status: timeout" in content else "error"))
@@ -106,20 +123,48 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
                     output=content,
                 )
                 if status != "passed":
-                    retry_count += 1
+                    failed_tool_messages += 1
+
+            elif "=== Goal Verification Result ===" in content:
+                status = "passed" if "Status: passed" in content else ("failed" if "Status: failed" in content else "uncertain")
+                summary_line = [line for line in content.splitlines() if line.startswith("Summary:")]
+                summary = summary_line[0].replace("Summary:", "").strip() if summary_line else ""
+
+                evidence_lines = []
+                in_evidence = False
+                for line in content.splitlines():
+                    if line.startswith("Evidence:"):
+                        in_evidence = True
+                        continue
+                    if in_evidence and line.startswith("  •"):
+                        evidence_lines.append(line.replace("  •", "").strip())
+
+                verification_result = VerificationResult(
+                    status=status,
+                    summary=summary,
+                    evidence=evidence_lines,
+                )
+                if status != "passed":
+                    failed_tool_messages += 1
+
+    retry_count = max(existing_retry_count, failed_tool_messages)
 
     updated_state = dict(state)
     updated_state["plan"] = plan
     updated_state["retrieved_context"] = retrieved_context
     updated_state["modified_files"] = modified_files
     updated_state["validation_result"] = validation_result
+    updated_state["verification_result"] = verification_result
     updated_state["retry_count"] = retry_count
     updated_state["max_retries"] = max_retries
+    if task_id:
+        updated_state["task_id"] = task_id
+    updated_state["status"] = status_val
     return updated_state  # type: ignore
 
 
 def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = "."):
-    """Constructs and compiles the Phase 6 autonomous testing & self-correction agent loop.
+    """Constructs and compiles the Phase 8 persistent agent execution graph.
 
     Args:
         llm: Optional chat model instance. Defaults to ChatOpenAI configured via env.
@@ -135,10 +180,18 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
     llm_with_tools = llm.bind_tools(tools)
 
     def reason_node(state: AgentState) -> dict:
-        """Reasoning node that invokes the model with accumulated messages and validation state."""
+        """Reasoning node that invokes the model with accumulated state and checkpoints persistent memory."""
         state = sync_plan_from_messages(state)
         messages = list(state.get("messages", []))
         user_goal = state.get("user_goal", "")
+        task_id = state.get("task_id")
+        storage_dir = getattr(state, "storage_dir", ".agent_memory")
+
+        if task_id:
+            try:
+                save_state(task_id, state, status=state.get("status", "running"), storage_dir=storage_dir)
+            except Exception:
+                pass
 
         input_messages = []
         if not any(isinstance(m, SystemMessage) for m in messages):
@@ -160,7 +213,13 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
             res_dict["modified_files"] = state["modified_files"]
         if state.get("validation_result"):
             res_dict["validation_result"] = state["validation_result"]
+        if state.get("verification_result"):
+            res_dict["verification_result"] = state["verification_result"]
         res_dict["retry_count"] = state.get("retry_count", 0)
+        if state.get("task_id"):
+            res_dict["task_id"] = state["task_id"]
+        if state.get("status"):
+            res_dict["status"] = state["status"]
 
         if not state.get("messages") and user_goal:
             res_dict["messages"] = [HumanMessage(content=user_goal), response]
@@ -192,32 +251,90 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
     return workflow.compile()
 
 
-def run_agent(goal: str, workspace_root: str = ".", llm: BaseChatModel | None = None) -> dict:
-    """Executes the agent loop for a given user goal.
+def run_agent(
+    goal: str = "",
+    workspace_root: str = ".",
+    llm: BaseChatModel | None = None,
+    task_id: str | None = None,
+    resume: bool = False,
+    storage_dir: str = ".agent_memory",
+) -> dict:
+    """Executes or resumes the agent loop for a software engineering goal with persistent memory.
 
     Args:
-        goal: High-level goal string for the agent.
+        goal: High-level goal string for the agent (required for new tasks).
         workspace_root: Directory path restricting tool execution.
-        llm: Optional chat model (useful for passing mocked LLMs in tests).
+        llm: Optional chat model instance.
+        task_id: Optional unique task identifier for persistence and resume.
+        resume: Set to True to resume an existing task from storage_dir/<task_id>.json.
+        storage_dir: Directory path for persistent JSON memory storage.
 
     Returns:
-        Final state dictionary containing conversation history, plan, and validation results.
+        Final state dictionary containing conversation history, plan, validation, verification results, and task_id.
     """
-    graph = build_agent_graph(llm=llm, workspace_root=workspace_root)
-    initial_state = {
-        "user_goal": goal,
-        "workspace_root": workspace_root,
-        "messages": [HumanMessage(content=goal)],
-        "plan": None,
-        "retrieved_context": [],
-        "modified_files": [],
-        "validation_result": None,
-        "retry_count": 0,
-        "max_retries": 3,
-    }
+    if resume:
+        if not task_id:
+            raise ValueError("Error: task_id must be provided when resume=True.")
+        initial_state = load_state(task_id, storage_dir=storage_dir)
+        if workspace_root != ".":
+            initial_state["workspace_root"] = workspace_root
+    else:
+        if not task_id:
+            import uuid
+            task_id = f"task_{uuid.uuid4().hex[:8]}"
 
+        if not goal:
+            raise ValueError("Error: Goal must be provided for new agent task execution.")
+
+        initial_state = {
+            "task_id": task_id,
+            "status": "running",
+            "user_goal": goal,
+            "workspace_root": workspace_root,
+            "messages": [HumanMessage(content=goal)],
+            "plan": None,
+            "retrieved_context": [],
+            "modified_files": [],
+            "validation_result": None,
+            "verification_result": None,
+            "retry_count": 0,
+            "max_retries": 3,
+        }
+
+    graph = build_agent_graph(llm=llm, workspace_root=workspace_root)
     final_state = graph.invoke(initial_state)
-    return sync_plan_from_messages(final_state)
+    synced_state = sync_plan_from_messages(final_state)
+
+    ver_res = synced_state.get("verification_result")
+    if ver_res and ver_res.get("status") == "passed":
+        synced_state["status"] = "completed"
+    else:
+        synced_state["status"] = "paused" if synced_state.get("status") == "running" else synced_state.get("status", "running")
+
+    if task_id:
+        try:
+            save_state(task_id, synced_state, status=synced_state.get("status", "completed"), storage_dir=storage_dir)
+        except Exception:
+            pass
+
+    return synced_state
+
+
+def resume_agent(
+    task_id: str,
+    workspace_root: str = ".",
+    llm: BaseChatModel | None = None,
+    storage_dir: str = ".agent_memory",
+) -> dict:
+    """Resumes an existing agent task from persistent memory using its task_id."""
+    return run_agent(
+        goal="",
+        workspace_root=workspace_root,
+        llm=llm,
+        task_id=task_id,
+        resume=True,
+        storage_dir=storage_dir,
+    )
 
 
 def main():
@@ -235,11 +352,17 @@ def main():
 
     try:
         final_state = run_agent(goal=goal, workspace_root=workspace_root)
+        task_id = final_state.get("task_id", "")
+        exec_status = final_state.get("status", "completed")
         messages = final_state.get("messages", [])
         plan = final_state.get("plan")
         modified_files = final_state.get("modified_files", [])
         val_result = final_state.get("validation_result")
+        ver_result = final_state.get("verification_result")
         retry_count = final_state.get("retry_count", 0)
+
+        print(f"Task ID: {task_id}")
+        print(f"Execution Status: {exec_status}")
 
         print("\n=== Agent Trace ===")
         for msg in messages:
@@ -267,6 +390,15 @@ def main():
             print(f"Status: {val_result.get('status')}")
             print(f"Summary: {val_result.get('summary')}")
             print(f"Recovery Retries Performed: {retry_count}")
+
+        if ver_result:
+            print("\n=== Goal Verification Result ===")
+            print(f"Status: {ver_result.get('status')}")
+            print(f"Summary: {ver_result.get('summary')}")
+            if ver_result.get("evidence"):
+                print("Evidence:")
+                for ev in ver_result.get("evidence", []):
+                    print(f"  • {ev}")
 
         if plan:
             print("\n=== Final Plan State ===")

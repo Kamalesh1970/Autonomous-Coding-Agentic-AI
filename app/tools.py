@@ -467,7 +467,9 @@ def _run_tests_impl(
     if not resolved_dir.exists():
         return f"Error: Target directory '{target_directory}' does not exist."
 
-    cmd = [sys.executable, "-m", "pytest"]
+    cmd = [sys.executable, "-B", "-m", "pytest", "-o", "dont_write_bytecode=True"]
+    env = dict(os.environ)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
 
     try:
         res = subprocess.run(
@@ -477,6 +479,7 @@ def _run_tests_impl(
             text=True,
             timeout=timeout_seconds,
             check=False,
+            env=env,
         )
 
         exit_code = res.returncode
@@ -724,6 +727,39 @@ def revise_plan(new_tasks: list[dict], reason: str) -> str:
     )
 
 
+def _verify_goal_impl(status: str, summary: str, evidence: list[str] | None = None) -> str:
+    """Safely format a goal verification observation."""
+    valid_statuses = ["passed", "failed", "uncertain"]
+    normalized_status = status.lower().strip() if status else "uncertain"
+    if normalized_status not in valid_statuses:
+        normalized_status = "uncertain"
+
+    ev_list = evidence or []
+    ev_str = "\n".join([f"  • {item}" for item in ev_list]) if ev_list else "  • (No specific evidence items provided)"
+
+    return (
+        f"=== Goal Verification Result ===\n"
+        f"Status: {normalized_status}\n"
+        f"Summary: {summary}\n"
+        f"Evidence:\n{ev_str}"
+    )
+
+
+@tool
+def verify_goal(status: str, summary: str, evidence: list[str] = []) -> str:
+    """Evaluate whether the user's original goal has been verified against repository evidence.
+
+    Args:
+        status: Verification status ('passed', 'failed', or 'uncertain').
+        summary: Concise explanation supporting the verification decision.
+        evidence: List of concrete repository evidence lines/findings (e.g. code snippets, test results).
+
+    Returns:
+        Structured verification evaluation result.
+    """
+    return _verify_goal_impl(status=status, summary=summary, evidence=evidence)
+
+
 def create_workspace_tools(workspace_root: str = "."):
     """Create repository inspection, retrieval, code modification, validation, and planning tools bound to workspace root.
 
@@ -863,4 +899,5 @@ def create_workspace_tools(workspace_root: str = "."):
         create_plan,
         update_task_status,
         revise_plan,
+        verify_goal,
     ]

@@ -6,6 +6,7 @@ from langgraph.graph.message import add_messages
 
 TaskStatus = Literal["pending", "in_progress", "completed", "failed", "blocked"]
 ValidationStatus = Literal["passed", "failed", "timeout", "error"]
+VerificationStatus = Literal["passed", "failed", "uncertain"]
 
 
 class Task(TypedDict, total=False):
@@ -57,6 +58,19 @@ class ValidationResult(TypedDict, total=False):
     output: str
 
 
+class VerificationResult(TypedDict, total=False):
+    """Structured representation of goal verification output.
+
+    Attributes:
+        status: Status of the goal verification (passed, failed, uncertain).
+        summary: Concise explanation of why the verification status was determined.
+        evidence: List of concrete repository evidence lines/findings supporting the decision.
+    """
+    status: VerificationStatus
+    summary: str
+    evidence: list[str]
+
+
 class AgentState(TypedDict, total=False):
     """Explicit state representation for the autonomous coding agent.
 
@@ -69,8 +83,11 @@ class AgentState(TypedDict, total=False):
         retrieved_context: Optional list of retrieved code context snippets and query metadata.
         modified_files: Optional list of repository file paths modified by code writing tools.
         validation_result: Optional ValidationResult tracking test execution output.
+        verification_result: Optional VerificationResult tracking goal verification evaluation.
         retry_count: Number of recovery/retry attempts performed.
         max_retries: Maximum permitted recovery attempts before escalation.
+        task_id: Unique persistent identifier for the agent session task.
+        status: Execution status (running, paused, completed, failed, interrupted).
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     user_goal: str
@@ -79,8 +96,11 @@ class AgentState(TypedDict, total=False):
     retrieved_context: list[dict] | None
     modified_files: list[str] | None
     validation_result: ValidationResult | None
+    verification_result: VerificationResult | None
     retry_count: int
     max_retries: int
+    task_id: str
+    status: str
 
 
 def create_plan_state(goal: str, raw_tasks: list[dict]) -> ExecutionPlan:

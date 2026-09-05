@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "task_id": "task_goal_1",
+  "user_goal": "Original long-running goal",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-10/test_goal_survives_resume0",
+  "status": "running",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": null,
+  "retry_count": 0,
+  "max_retries": 3,
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Original long-running goal"
+    }
+  ]
+}
