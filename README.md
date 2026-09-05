@@ -1,4 +1,4 @@
-# Autonomous Coding Agentic AI (Phase 9: Secure Sandbox & Execution Isolation)
+# Autonomous Coding Agentic AI (Phase 10: Safe Git/GitHub Delivery & Human Approval)
 
 Minimal autonomous software engineering agent built with **Python** and **LangGraph**.
 
@@ -6,48 +6,59 @@ Reference Architecture: Inspired by [Open SWE](https://github.com/langchain-ai/o
 
 ---
 
-## 🎯 What is Phase 9?
+## 🎯 What is Phase 10?
 
-Phase 9 introduces an explicit, security-oriented **Execution Boundary / Sandbox Layer** (`app/sandbox.py`). The autonomous agent is constrained to a controlled execution environment so it cannot receive unrestricted access to the host machine.
+Phase 10 equips the agent with **Safe Git/GitHub Delivery and Human-in-the-Loop Approval** capabilities (`git_status`, `git_diff`, `git_current_branch`, `git_create_branch`, `request_human_approval`, `git_commit`, `git_push`, `create_pull_request`).
 
-The agentic lifecycle for Phase 9 is:
+The agentic lifecycle for Phase 10 is:
 
-$$\text{GOAL} \longrightarrow \text{PLAN} \longrightarrow \text{RETRIEVE} \longrightarrow \text{DECIDE ACTION} \longrightarrow \text{SAFETY CHECK} \longrightarrow \text{SANDBOX EXECUTION} \longrightarrow \text{OBSERVE} \longrightarrow \text{EVALUATE} \longrightarrow \text{RECOVER} \longrightarrow \text{VERIFY} \longrightarrow \text{PERSIST}$$
+$$\text{VERIFIED CODE CHANGES} \longrightarrow \text{INSPECT GIT STATE} \longrightarrow \text{PREPARE DELIVERY} \longrightarrow \text{REQUEST HUMAN APPROVAL} \longrightarrow \text{[ HUMAN APPROVAL DECISION ]} \longrightarrow \text{EXECUTE APPROVED GIT ACTION}$$
 
 ---
 
-## 🛡️ Security and Sandbox Architecture (`app/sandbox.py`)
+## 🚦 Human-in-the-Loop Approval Model
 
-The sandbox enforces security policies independently in code. The LLM is **not** treated as a security boundary:
+The agent is prohibited from blindly executing externally impactful delivery actions:
 
-1. **Repository Boundary (`sandbox_root`)**: All filesystem operations and command executions are locked within the designated repository root directory. Attempts to traverse outside (`../../`) or access absolute paths outside root are rejected.
-2. **Safe Path Resolution & Symlink Checks**: Every path is resolved (`Path.resolve()`). Symlinks pointing outside the repository root are detected and blocked.
-3. **Controlled Command Allowlist**: Low-level shell execution (`execute_shell`, `bash`, `sh`, `zsh`, `powershell`, `cmd`, `curl`, `wget`, `rm`) is **disallowed**. Only explicit allowlisted commands (such as `python -m pytest` and read-only `git status/diff`) are permitted.
-4. **Environment Isolation**: Subprocesses run with a minimal environment. Host secrets, API keys (`OPENAI_API_KEY`), credentials, and `.env` contents are stripped from executed subprocess environments.
-5. **Working Directory Enforcement**: Subprocesses are forced to execute strictly inside the sandbox root directory.
-6. **Execution Timeout**: Bounded execution timeout (default 30 seconds) prevents infinite process hangs.
-7. **Output Limits**: Stdout/stderr output is truncated at bounded limits with explicit truncation indicators.
-8. **Structured Security Events**: Tracks security rejection events (`path_escape_rejected`, `command_rejected`, `timeout`, `output_truncated`).
+1. **Actions Requiring Explicit Approval**: `git commit`, `git push`, `create_pull_request`.
+2. **Read-Only / Safe Local Actions**: `git_status`, `git_diff`, `git_current_branch`, `git_create_branch` (read-only and safe local feature branch creation run autonomously).
+3. **Approval States**:
+   - `not_required`: Read-only / inspection operations.
+   - `pending`: Delivery action requested; waiting for human decision.
+   - `approved`: Human operator approved action (`approve_task`); agent proceeds with commit/push/PR.
+   - `rejected`: Human operator rejected action (`approve_task`); delivery action is cancelled without modifying Git history.
+4. **State Persistence**: Approval status (`pending`, `approved`, `rejected`) is persisted to disk and survives task pause/resume.
+
+---
+
+## 🛡️ Security & Git Boundary Controls (`app/sandbox.py`)
+
+- ❌ Destructive Git commands (`git reset --hard`, `git clean -fd`, `git push --force`) are strictly **prohibited**.
+- ❌ Branch name injection (names starting with `-` or containing illegal shell characters) is blocked.
+- ❌ Overwriting existing Git branches is prevented.
+- ❌ Empty commits without staged changes are rejected.
+- ❌ Credentials and secret tokens (`GITHUB_TOKEN`, `OPENAI_API_KEY`) are stripped/redacted from command outputs.
 
 ---
 
 ## 🔒 Security Threat Model
 
-| Threat Scenario | Sandbox Defense / Protection |
+| Threat Scenario | Sandbox & Delivery Protection |
 | :--- | :--- |
-| **LLM generates malicious path (`../../etc/passwd`)** | `safe_resolve_path` checks boundary against `sandbox_root` and blocks traversal. |
-| **LLM requests arbitrary shell execution (`rm -rf /`)** | Execution interface rejects non-allowlisted binaries (`bash`, `sh`, `rm`). |
-| **Symlink points to host secret outside repository** | Symlink target resolution detects external pointer and blocks file access/edits. |
-| **Code execution hangs indefinitely** | `run_command` timeout kills subprocess gracefully after threshold. |
-| **Excessive output overwhelms LLM context** | Bounded stdout/stderr truncates output with explicit notification. |
-| **Executed code leaks host API keys (`OPENAI_API_KEY`)** | Minimal environment construction filters out sensitive host keys. |
+| **LLM attempts unapproved commit or push** | Tool checks `approval_status`; blocks operation unless explicitly `approved`. |
+| **Human rejects delivery request** | `approval_status = "rejected"` cancels operation and halts execution cleanly. |
+| **Branch name injection (`-b_malicious` or `; rm`)** | `validate_branch_name` rejects invalid characters and flags. |
+| **Destructive Git commands (`git reset --hard`)** | `is_command_allowed` rejects destructive commands before execution. |
+| **Secrets leak into Git commits or push logs** | Subprocess environment isolation & token redaction mask credentials. |
 
 ---
 
 ## ⚠️ Known Limitations
 
-- **Local Subprocess Isolation**: The Phase 9 sandbox uses local subprocess isolation and environment sanitization. It is **not** equivalent to kernel-level containerization (Docker) or virtual machine isolation.
-- **Academic Prototype**: Designed as an academic software engineering prototype illustrating autonomous safety boundaries.
+- **Local Subprocess Isolation**: Uses local subprocess execution and environment sanitization (not equivalent to VM/Docker).
+- **GitHub Mocking**: Remote push and PR creation operate safely offline with token redaction for test environments.
+- **Academic Prototype**: Designed as an academic software engineering prototype.
+
 
 ---
 

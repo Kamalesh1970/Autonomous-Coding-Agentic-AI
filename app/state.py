@@ -7,6 +7,7 @@ from langgraph.graph.message import add_messages
 TaskStatus = Literal["pending", "in_progress", "completed", "failed", "blocked"]
 ValidationStatus = Literal["passed", "failed", "timeout", "error"]
 VerificationStatus = Literal["passed", "failed", "uncertain"]
+ApprovalStatus = Literal["not_required", "pending", "approved", "rejected"]
 
 
 class Task(TypedDict, total=False):
@@ -88,6 +89,18 @@ class AgentState(TypedDict, total=False):
         max_retries: Maximum permitted recovery attempts before escalation.
         task_id: Unique persistent identifier for the agent session task.
         status: Execution status (running, paused, completed, failed, interrupted).
+        git_status: Structured Git status text.
+        git_diff: Bounded git diff text.
+        current_branch: Current active Git branch name.
+        target_branch: Target base branch for pull requests.
+        delivery_action: Delivery action identifier ('commit', 'push', 'pull_request').
+        approval_required: Boolean flag indicating if human approval is pending.
+        approval_status: Current approval state ('not_required', 'pending', 'approved', 'rejected').
+        approval_reason: Explanation of why approval was requested or rejected.
+        commit_message: Proposed/executed commit message.
+        commit_created: Boolean flag indicating whether commit was created.
+        push_requested: Boolean flag indicating whether push was requested.
+        pr_requested: Boolean flag indicating whether pull request creation was requested.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     user_goal: str
@@ -101,6 +114,19 @@ class AgentState(TypedDict, total=False):
     max_retries: int
     task_id: str
     status: str
+    git_status: str | None
+    git_diff: str | None
+    current_branch: str | None
+    target_branch: str | None
+    delivery_action: str | None
+    approval_required: bool
+    approval_status: ApprovalStatus
+    approval_reason: str | None
+    commit_message: str | None
+    commit_created: bool
+    push_requested: bool
+    pr_requested: bool
+
 
 
 def create_plan_state(goal: str, raw_tasks: list[dict]) -> ExecutionPlan:
@@ -178,3 +204,32 @@ def revise_plan_state(plan: ExecutionPlan, new_raw_tasks: list[dict], reason: st
     revised_plan["revision_count"] = plan.get("revision_count", 0) + 1
     revised_plan["revision_reason"] = reason
     return revised_plan
+
+
+# -----------------------------------------------------------------------------
+# Active Approval Status Tracker
+# -----------------------------------------------------------------------------
+from pathlib import Path
+
+_ACTIVE_APPROVAL_STATE: dict[str, str] = {}
+
+
+def set_active_approval_status(workspace_root: str, status: str) -> None:
+    """Sets the active human approval status for a workspace root directory."""
+    try:
+        norm_path = str(Path(workspace_root).resolve())
+        _ACTIVE_APPROVAL_STATE[norm_path] = str(status or "pending")
+    except Exception:
+        pass
+
+
+def get_active_approval_status(workspace_root: str) -> str:
+    """Gets the active human approval status for a workspace root directory."""
+    try:
+        norm_path = str(Path(workspace_root).resolve())
+        if norm_path in _ACTIVE_APPROVAL_STATE:
+            return _ACTIVE_APPROVAL_STATE[norm_path]
+    except Exception:
+        pass
+    return "pending"
+

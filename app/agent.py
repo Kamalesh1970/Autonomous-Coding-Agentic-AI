@@ -31,12 +31,13 @@ from app.memory import save_state, load_state, delete_state
 
 SYSTEM_PROMPT = (
     "You are an autonomous software engineering assistant equipped with repository inspection, "
-    "context retrieval, dynamic planning, safe code editing, automated testing, and goal verification tools.\n\n"
+    "context retrieval, dynamic planning, safe code editing, automated testing, goal verification, "
+    "and safe Git/GitHub delivery tools.\n\n"
     "When given a software engineering goal or bug fix task:\n"
     "1. Decompose goals into structured subtasks using `create_plan` with explicit dependencies.\n"
     "2. Use `retrieve_relevant_context(query)` or `read_file(file_path)` to locate relevant code context.\n"
     "3. Apply code modifications using `replace_in_file(file_path, old_text, new_text)` or `write_file`.\n"
-    "4. Inspect repository changes with `git_diff()`.\n"
+    "4. Inspect repository changes with `git_diff()` or `git_status()`.\n"
     "5. IMPERATIVE VALIDATION & SELF-CORRECTION LOOP:\n"
     "   - Execute validation tests using `run_tests()`.\n"
     "   - If tests fail (`Status: failed`), observe error tracebacks/assertions, diagnose the root cause, "
@@ -46,9 +47,11 @@ SYSTEM_PROMPT = (
     "   - Inspect repository evidence (e.g. read_file, search_code, git_diff) to check whether the original "
     "user goal has actually been satisfied.\n"
     "   - Invoke `verify_goal(status, summary, evidence)` where status is 'passed', 'failed', or 'uncertain'.\n"
-    "   - If verification fails or is uncertain, diagnose missing requirements, apply fixes, and re-test/re-verify, "
-    "respecting max retries.\n"
-    "7. Conclude with a comprehensive response when all tasks pass validation and goal verification passes."
+    "7. SAFE GIT DELIVERY & HUMAN APPROVAL:\n"
+    "   - For externally impactful actions (commit, push, pull_request), you MUST request human approval first "
+    "using `request_human_approval(action, reason, risk)`.\n"
+    "   - Only execute `git_commit`, `git_push`, or `create_pull_request` after human approval is confirmed.\n"
+    "8. Conclude with a comprehensive response when all tasks pass validation, verification passes, and delivery is complete."
 )
 
 
@@ -68,7 +71,7 @@ def get_default_llm() -> BaseChatModel:
 
 
 def sync_plan_from_messages(state: AgentState) -> AgentState:
-    """Helper to update state plan, retrieved context, modified files, validation, and goal verification results."""
+    """Helper to update state plan, retrieved context, modified files, validation, goal verification, and Git approval state."""
     messages = state.get("messages", [])
     plan = state.get("plan")
     user_goal = state.get("user_goal", "")
@@ -81,6 +84,19 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
     existing_retry_count = int(state.get("retry_count", 0))
     failed_tool_messages = 0
     max_retries = state.get("max_retries", 3)
+
+    git_status = state.get("git_status")
+    git_diff = state.get("git_diff")
+    current_branch = state.get("current_branch")
+    target_branch = state.get("target_branch")
+    delivery_action = state.get("delivery_action")
+    approval_required = bool(state.get("approval_required", False))
+    approval_status = state.get("approval_status", "not_required")
+    approval_reason = state.get("approval_reason")
+    commit_message = state.get("commit_message")
+    commit_created = bool(state.get("commit_created", False))
+    push_requested = bool(state.get("push_requested", False))
+    pr_requested = bool(state.get("pr_requested", False))
 
     for msg in messages:
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
@@ -108,6 +124,27 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
                     fp = args.get("file_path", "")
                     if fp and fp not in modified_files:
                         modified_files.append(fp)
+                elif name == "git_create_branch":
+                    b = args.get("branch_name", "")
+                    if b:
+                        current_branch = b
+                elif name == "request_human_approval":
+                    delivery_action = args.get("action", "commit")
+                    approval_reason = args.get("reason", "")
+                    if approval_status not in ("approved", "rejected"):
+                        approval_required = True
+                        approval_status = "pending"
+                elif name == "git_commit":
+                    cm = args.get("message", "")
+                    if cm:
+                        commit_message = cm
+                elif name == "git_push":
+                    push_requested = True
+                elif name == "create_pull_request":
+                    pr_requested = True
+                    tb = args.get("base_branch", "main")
+                    if tb:
+                        target_branch = tb
 
         elif isinstance(msg, ToolMessage) or msg.__class__.__name__ == "ToolMessage":
             content = getattr(msg, "content", "")
@@ -147,6 +184,14 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
                 if status != "passed":
                     failed_tool_messages += 1
 
+            elif "=== Human Approval Request ===" in content:
+                if approval_status not in ("approved", "rejected"):
+                    approval_required = True
+                    approval_status = "pending"
+
+            elif "Successfully committed changes" in content:
+                commit_created = True
+
     retry_count = max(existing_retry_count, failed_tool_messages)
 
     updated_state = dict(state)
@@ -157,9 +202,27 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
     updated_state["verification_result"] = verification_result
     updated_state["retry_count"] = retry_count
     updated_state["max_retries"] = max_retries
+    updated_state["git_status"] = git_status
+    updated_state["git_diff"] = git_diff
+    updated_state["current_branch"] = current_branch
+    updated_state["target_branch"] = target_branch
+    updated_state["delivery_action"] = delivery_action
+    updated_state["approval_required"] = approval_required
+    updated_state["approval_status"] = approval_status
+    updated_state["approval_reason"] = approval_reason
+    updated_state["commit_message"] = commit_message
+    updated_state["commit_created"] = commit_created
+    updated_state["push_requested"] = push_requested
+    updated_state["pr_requested"] = pr_requested
+
     if task_id:
         updated_state["task_id"] = task_id
     updated_state["status"] = status_val
+
+    from app.state import set_active_approval_status
+    ws = updated_state.get("workspace_root", ".")
+    set_active_approval_status(ws, approval_status)
+
     return updated_state  # type: ignore
 
 
@@ -301,6 +364,9 @@ def run_agent(
             "max_retries": 3,
         }
 
+    from app.state import set_active_approval_status
+    set_active_approval_status(workspace_root, initial_state.get("approval_status", "pending"))
+
     graph = build_agent_graph(llm=llm, workspace_root=workspace_root)
     final_state = graph.invoke(initial_state)
     synced_state = sync_plan_from_messages(final_state)
@@ -335,6 +401,35 @@ def resume_agent(
         resume=True,
         storage_dir=storage_dir,
     )
+
+
+def approve_task(
+    task_id: str,
+    decision: str,
+    notes: str = "",
+    workspace_root: str = ".",
+    llm: BaseChatModel | None = None,
+    storage_dir: str = ".agent_memory",
+) -> dict:
+    """Processes a human approval decision for a persistent task and resumes if approved."""
+    from app.tools import process_human_approval
+
+    initial_state = load_state(task_id, storage_dir=storage_dir)
+    updated_state = process_human_approval(initial_state, decision=decision, notes=notes)
+
+    if updated_state.get("approval_status") == "rejected":
+        updated_state["status"] = "paused"
+        save_state(task_id, updated_state, status="paused", storage_dir=storage_dir)
+        return updated_state
+
+    save_state(task_id, updated_state, status="running", storage_dir=storage_dir)
+    return resume_agent(
+        task_id=task_id,
+        workspace_root=workspace_root,
+        llm=llm,
+        storage_dir=storage_dir,
+    )
+
 
 
 def main():

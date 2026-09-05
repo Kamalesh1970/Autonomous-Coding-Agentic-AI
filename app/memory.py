@@ -104,6 +104,19 @@ def serialize_state(state: AgentState, status: str = "running") -> dict[str, Any
     retry_count = int(state.get("retry_count", 0))
     max_retries = int(state.get("max_retries", 3))
 
+    git_status = state.get("git_status")
+    git_diff = state.get("git_diff")
+    current_branch = state.get("current_branch")
+    target_branch = state.get("target_branch")
+    delivery_action = state.get("delivery_action")
+    approval_required = bool(state.get("approval_required", False))
+    approval_status = str(state.get("approval_status") or "not_required")
+    approval_reason = state.get("approval_reason")
+    commit_message = state.get("commit_message")
+    commit_created = bool(state.get("commit_created", False))
+    push_requested = bool(state.get("push_requested", False))
+    pr_requested = bool(state.get("pr_requested", False))
+
     raw_messages = state.get("messages", [])
     serialized_messages = [serialize_message(m) for m in raw_messages]
 
@@ -120,6 +133,18 @@ def serialize_state(state: AgentState, status: str = "running") -> dict[str, Any
         "verification_result": verification_result,
         "retry_count": retry_count,
         "max_retries": max_retries,
+        "git_status": git_status,
+        "git_diff": git_diff,
+        "current_branch": current_branch,
+        "target_branch": target_branch,
+        "delivery_action": delivery_action,
+        "approval_required": approval_required,
+        "approval_status": approval_status,
+        "approval_reason": approval_reason,
+        "commit_message": commit_message,
+        "commit_created": commit_created,
+        "push_requested": push_requested,
+        "pr_requested": pr_requested,
         "messages": serialized_messages,
     }
 
@@ -144,6 +169,19 @@ def deserialize_state(data: dict[str, Any]) -> AgentState:
     retry_count = int(data.get("retry_count", 0))
     max_retries = int(data.get("max_retries", 3))
 
+    git_status = data.get("git_status")
+    git_diff = data.get("git_diff")
+    current_branch = data.get("current_branch")
+    target_branch = data.get("target_branch")
+    delivery_action = data.get("delivery_action")
+    approval_required = bool(data.get("approval_required", False))
+    approval_status = data.get("approval_status", "not_required")
+    approval_reason = data.get("approval_reason")
+    commit_message = data.get("commit_message")
+    commit_created = bool(data.get("commit_created", False))
+    push_requested = bool(data.get("push_requested", False))
+    pr_requested = bool(data.get("pr_requested", False))
+
     raw_messages = data.get("messages") or []
     deserialized_messages = [deserialize_message(m) for m in raw_messages]
 
@@ -159,8 +197,21 @@ def deserialize_state(data: dict[str, Any]) -> AgentState:
         verification_result=verification_result,
         retry_count=retry_count,
         max_retries=max_retries,
+        git_status=git_status,
+        git_diff=git_diff,
+        current_branch=current_branch,
+        target_branch=target_branch,
+        delivery_action=delivery_action,
+        approval_required=approval_required,
+        approval_status=approval_status,
+        approval_reason=approval_reason,
+        commit_message=commit_message,
+        commit_created=commit_created,
+        push_requested=push_requested,
+        pr_requested=pr_requested,
         messages=deserialized_messages,
     )
+
 
 
 def save_state(

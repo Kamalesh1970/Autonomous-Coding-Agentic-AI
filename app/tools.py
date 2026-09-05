@@ -646,8 +646,205 @@ def verify_goal(status: str, summary: str, evidence: list[str] = []) -> str:
     return _verify_goal_impl(status=status, summary=summary, evidence=evidence)
 
 
+# -----------------------------------------------------------------------------
+# Phase 10 Git Delivery & Human Approval Implementations
+# -----------------------------------------------------------------------------
+def _git_current_branch_impl(workspace_root: str = ".") -> str:
+    """Safely inspect current active Git branch name."""
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.git_current_branch()
+
+
+def _git_create_branch_impl(branch_name: str, workspace_root: str = ".") -> str:
+    """Safely create a new local feature branch."""
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.git_create_branch(branch_name=branch_name)
+
+
+def _git_commit_impl(message: str, files: list[str] | None = None, workspace_root: str = ".") -> str:
+    """Safely stage modified files and commit with validated commit message."""
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.git_commit(message=message, files=files)
+
+
+def _git_push_impl(remote: str = "origin", branch: str | None = None, workspace_root: str = ".") -> str:
+    """Safely push local branch changes to remote repository."""
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.git_push(remote=remote, branch=branch)
+
+
+def _create_pull_request_impl(
+    title: str, body: str, head_branch: str, base_branch: str = "main", workspace_root: str = "."
+) -> str:
+    """Safely create pull request representation."""
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    return sandbox.create_pull_request(
+        title=title, body=body, head_branch=head_branch, base_branch=base_branch
+    )
+
+
+def _request_human_approval_impl(
+    action: str, reason: str, risk: str = "medium", workspace_root: str = "."
+) -> str:
+    """Format structured human approval request."""
+    sandbox = ExecutionSandbox(sandbox_root=workspace_root)
+    branch = sandbox.git_current_branch()
+    diff_res = sandbox.run_command(["git", "diff", "--stat"], cwd=workspace_root)
+    status_res = sandbox.run_command(["git", "status", "--short"], cwd=workspace_root)
+    diff_summary = diff_res.get("output", "No diff summary") or "No unstaged diff"
+    status_summary = status_res.get("output", "Clean") or "No modified files"
+
+    return (
+        f"=== Human Approval Request ===\n"
+        f"Action: {action}\n"
+        f"Reason: {reason}\n"
+        f"Repository: {Path(workspace_root).resolve()}\n"
+        f"Branch: {branch}\n"
+        f"Files affected:\n{status_summary}\n"
+        f"Git diff summary:\n{diff_summary}\n"
+        f"Risk: {risk}\n"
+        f"Status: pending"
+    )
+
+
+from app.state import set_active_approval_status, get_active_approval_status
+
+
+def process_human_approval(state: dict, decision: str, notes: str = "") -> dict:
+    """Updates agent state with human approval decision ('approved' or 'rejected')."""
+    updated = dict(state)
+    decision_norm = str(decision or "").strip().lower()
+    ws = updated.get("workspace_root", ".")
+
+    if decision_norm in ("approve", "approved", "yes", "pass"):
+        updated["approval_status"] = "approved"
+        updated["approval_required"] = False
+        updated["approval_reason"] = f"Action approved by human operator: {notes}" if notes else "Action approved by human operator."
+        set_active_approval_status(ws, "approved")
+    else:
+        updated["approval_status"] = "rejected"
+        updated["approval_required"] = False
+        updated["approval_reason"] = f"Action cancelled by human approval decision: {notes}" if notes else "Action cancelled by human approval decision."
+        updated["status"] = "paused"
+        set_active_approval_status(ws, "rejected")
+
+    return updated
+
+
+def _check_tool_approval(workspace_root: str = ".", action: str = "commit") -> tuple[str, str]:
+    """Checks if human approval was granted for the delivery action in active state."""
+    status = get_active_approval_status(workspace_root)
+    if status == "approved":
+        return "approved", "Action approved by human operator."
+    elif status == "rejected":
+        return "rejected", "Action cancelled by human approval decision."
+    return "pending", "Human approval required before performing action."
+
+
+# -----------------------------------------------------------------------------
+# Standalone Phase 10 Tools
+# -----------------------------------------------------------------------------
+@tool
+def git_current_branch() -> str:
+    """Query current active Git branch name of the workspace.
+
+    Returns:
+        Name of the current active branch (e.g. 'main', 'feature-auth').
+    """
+    return _git_current_branch_impl(workspace_root=".")
+
+
+@tool
+def git_create_branch(branch_name: str) -> str:
+    """Safely create and check out a new local feature branch inside the repository.
+
+    Args:
+        branch_name: Safe branch name (e.g. 'agent/add-feature').
+
+    Returns:
+        Confirmation message or error.
+    """
+    return _git_create_branch_impl(branch_name=branch_name, workspace_root=".")
+
+
+@tool
+def request_human_approval(action: str, reason: str, risk: str = "medium") -> str:
+    """Request explicit human approval before performing externally impactful delivery actions.
+
+    Args:
+        action: Delivery action name ('commit', 'push', 'pull_request').
+        reason: Justification for why this action should be taken.
+        risk: Estimated risk level ('low', 'medium', 'high').
+
+    Returns:
+        Formatted human approval request observation block.
+    """
+    return _request_human_approval_impl(action=action, reason=reason, risk=risk, workspace_root=".")
+
+
+@tool
+def git_commit(message: str, files: list[str] = []) -> str:
+    """Safely stage and commit repository changes after human approval.
+
+    Args:
+        message: Commit message describing the changes.
+        files: Optional list of relative file paths to commit.
+
+    Returns:
+        Commit confirmation or error observation.
+    """
+    app_status, app_reason = _check_tool_approval(".", action="commit")
+    if app_status == "rejected":
+        return f"Error: Action cancelled by human approval decision ({app_reason})."
+    elif app_status != "approved":
+        return "Error: Human approval required before performing git commit (approval_status is not 'approved'). Please invoke request_human_approval tool first."
+    return _git_commit_impl(message=message, files=files, workspace_root=".")
+
+
+@tool
+def git_push(remote: str = "origin", branch: str = "") -> str:
+    """Safely push committed branch changes to remote repository after human approval.
+
+    Args:
+        remote: Remote name (defaults to 'origin').
+        branch: Optional branch name to push (defaults to current branch).
+
+    Returns:
+        Push confirmation observation.
+    """
+    app_status, app_reason = _check_tool_approval(".", action="push")
+    if app_status == "rejected":
+        return f"Error: Action cancelled by human approval decision ({app_reason})."
+    elif app_status != "approved":
+        return "Error: Human approval required before performing git push (approval_status is not 'approved'). Please invoke request_human_approval tool first."
+    return _git_push_impl(remote=remote, branch=branch if branch else None, workspace_root=".")
+
+
+@tool
+def create_pull_request(title: str, body: str, head_branch: str, base_branch: str = "main") -> str:
+    """Create a pull request representation on GitHub after human approval.
+
+    Args:
+        title: Pull request title.
+        body: Detailed description of pull request changes.
+        head_branch: Source feature branch containing changes.
+        base_branch: Target base branch (defaults to 'main').
+
+    Returns:
+        Pull request creation observation block.
+    """
+    app_status, app_reason = _check_tool_approval(".", action="pull_request")
+    if app_status == "rejected":
+        return f"Error: Action cancelled by human approval decision ({app_reason})."
+    elif app_status != "approved":
+        return "Error: Human approval required before creating pull request (approval_status is not 'approved'). Please invoke request_human_approval tool first."
+    return _create_pull_request_impl(
+        title=title, body=body, head_branch=head_branch, base_branch=base_branch, workspace_root="."
+    )
+
+
 def create_workspace_tools(workspace_root: str = "."):
-    """Create repository inspection, retrieval, code modification, validation, and planning tools bound to workspace root.
+    """Create repository inspection, retrieval, code modification, validation, planning, and delivery tools bound to workspace root.
 
     Args:
         workspace_root: Path to the root workspace directory.
@@ -772,6 +969,107 @@ def create_workspace_tools(workspace_root: str = "."):
             timeout_seconds=timeout_seconds,
         )
 
+    @tool
+    def git_current_branch() -> str:
+        """Query current active Git branch name of the workspace.
+
+        Returns:
+            Name of the current active branch (e.g. 'main', 'feature-auth').
+        """
+        return _git_current_branch_impl(workspace_root=workspace_root)
+
+    @tool
+    def git_create_branch(branch_name: str) -> str:
+        """Safely create and check out a new local feature branch inside the repository.
+
+        Args:
+            branch_name: Safe branch name (e.g. 'agent/add-feature').
+
+        Returns:
+            Confirmation message or error.
+        """
+        return _git_create_branch_impl(branch_name=branch_name, workspace_root=workspace_root)
+
+    @tool
+    def request_human_approval(action: str, reason: str, risk: str = "medium") -> str:
+        """Request explicit human approval before performing externally impactful delivery actions.
+
+        Args:
+            action: Delivery action name ('commit', 'push', 'pull_request').
+            reason: Justification for why this action should be taken.
+            risk: Estimated risk level ('low', 'medium', 'high').
+
+        Returns:
+            Formatted human approval request observation block.
+        """
+        return _request_human_approval_impl(
+            action=action, reason=reason, risk=risk, workspace_root=workspace_root
+        )
+
+    @tool
+    def git_commit(message: str, files: list[str] = []) -> str:
+        """Safely stage and commit repository changes after human approval.
+
+        Args:
+            message: Commit message describing the changes.
+            files: Optional list of relative file paths to commit.
+
+        Returns:
+            Commit confirmation or error observation.
+        """
+        app_status, app_reason = _check_tool_approval(workspace_root, action="commit")
+        if app_status == "rejected":
+            return f"Error: Action cancelled by human approval decision ({app_reason})."
+        elif app_status != "approved":
+            return "Error: Human approval required before performing git commit (approval_status is not 'approved'). Please invoke request_human_approval tool first."
+        return _git_commit_impl(message=message, files=files, workspace_root=workspace_root)
+
+    @tool
+    def git_push(remote: str = "origin", branch: str = "") -> str:
+        """Safely push committed branch changes to remote repository after human approval.
+
+        Args:
+            remote: Remote name (defaults to 'origin').
+            branch: Optional branch name to push (defaults to current branch).
+
+        Returns:
+            Push confirmation observation.
+        """
+        app_status, app_reason = _check_tool_approval(workspace_root, action="push")
+        if app_status == "rejected":
+            return f"Error: Action cancelled by human approval decision ({app_reason})."
+        elif app_status != "approved":
+            return "Error: Human approval required before performing git push (approval_status is not 'approved'). Please invoke request_human_approval tool first."
+        return _git_push_impl(
+            remote=remote, branch=branch if branch else None, workspace_root=workspace_root
+        )
+
+    @tool
+    def create_pull_request(title: str, body: str, head_branch: str, base_branch: str = "main") -> str:
+        """Create a pull request representation on GitHub after human approval.
+
+        Args:
+            title: Pull request title.
+            body: Detailed description of pull request changes.
+            head_branch: Source feature branch containing changes.
+            base_branch: Target base branch (defaults to 'main').
+
+        Returns:
+            Pull request creation observation block.
+        """
+        app_status, app_reason = _check_tool_approval(workspace_root, action="pull_request")
+        if app_status == "rejected":
+            return f"Error: Action cancelled by human approval decision ({app_reason})."
+        elif app_status != "approved":
+            return "Error: Human approval required before creating pull request (approval_status is not 'approved'). Please invoke request_human_approval tool first."
+        return _create_pull_request_impl(
+            title=title,
+            body=body,
+            head_branch=head_branch,
+            base_branch=base_branch,
+            workspace_root=workspace_root,
+        )
+
     return [
         list_files,
         read_file,
@@ -786,4 +1084,11 @@ def create_workspace_tools(workspace_root: str = "."):
         update_task_status,
         revise_plan,
         verify_goal,
+        git_current_branch,
+        git_create_branch,
+        request_human_approval,
+        git_commit,
+        git_push,
+        create_pull_request,
     ]
+

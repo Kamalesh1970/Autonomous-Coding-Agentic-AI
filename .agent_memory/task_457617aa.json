@@ -1,0 +1,57 @@
+{
+  "version": "1.0",
+  "task_id": "task_457617aa",
+  "user_goal": "Commit change",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-14/test_commit_requires_approval0",
+  "status": "paused",
+  "plan": null,
+  "retrieved_context": [],
+  "modified_files": [],
+  "validation_result": null,
+  "verification_result": null,
+  "retry_count": 0,
+  "max_retries": 3,
+  "git_status": null,
+  "git_diff": null,
+  "current_branch": null,
+  "target_branch": null,
+  "delivery_action": null,
+  "approval_required": false,
+  "approval_status": "not_required",
+  "approval_reason": null,
+  "commit_message": "Unapproved commit",
+  "commit_created": true,
+  "push_requested": false,
+  "pr_requested": false,
+  "messages": [
+    {
+      "type": "HumanMessage",
+      "content": "Commit change"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Attempting commit without requesting approval first.",
+      "tool_calls": [
+        {
+          "name": "git_commit",
+          "args": {
+            "message": "Unapproved commit"
+          },
+          "id": "c1",
+          "type": "tool_call"
+        }
+      ]
+    },
+    {
+      "type": "ToolMessage",
+      "content": "Successfully committed changes to branch 'master' with message: 'Unapproved commit'.",
+      "tool_call_id": "c1",
+      "name": "git_commit"
+    },
+    {
+      "type": "AIMessage",
+      "content": "Finished with no further actions.",
+      "tool_calls": []
+    }
+  ]
+}

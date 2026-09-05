@@ -97,6 +97,18 @@ class ExecutionSandbox:
 
         return resolved
 
+    def validate_branch_name(self, branch_name: str) -> None:
+        """Validate branch name to reject dangerous arguments or shell injection."""
+        if not branch_name or not isinstance(branch_name, str):
+            raise SecurityError("Invalid branch name: Branch name must be a non-empty string.")
+
+        branch_name = branch_name.strip()
+        if branch_name.startswith("-") or branch_name.startswith("."):
+            raise SecurityError(f"Invalid branch name '{branch_name}': Branch name cannot start with hyphen or dot.")
+
+        if not re.match(r"^[a-zA-Z0-9_/.-]+$", branch_name):
+            raise SecurityError(f"Invalid branch name '{branch_name}': Contains invalid characters or potential injection.")
+
     def is_command_allowed(self, cmd: List[str]) -> Tuple[bool, str]:
         """Check if command line arguments satisfy the command allowlist policy.
 
@@ -136,15 +148,45 @@ class ExecutionSandbox:
             return True, "Allowed pytest execution."
 
         if exe_name == "git":
-            # Only allow read-only status and diff operations
-            if len(cmd) > 1 and cmd[1] in ("status", "diff"):
-                return True, "Allowed read-only git command."
-            return False, f"Git command '{' '.join(cmd[:2])}' is not in allowlist (only git status/diff allowed)."
+            if len(cmd) < 2:
+                return False, "Git command requires arguments."
+
+            subcmd = cmd[1]
+
+            # Reject destructive git subcommands and flags
+            destructive_flags = ["--hard", "-fd", "--force", "-f"]
+            if any(arg in destructive_flags for arg in cmd):
+                return False, "Destructive Git options (reset --hard, clean -fd, push --force) are strictly prohibited."
+
+            if subcmd in ("reset", "clean"):
+                return False, f"Destructive Git subcommand '{subcmd}' is disallowed."
+
+            if subcmd in ("status", "diff", "branch", "rev-parse", "log", "add"):
+                return True, f"Allowed git {subcmd} command."
+
+            if subcmd in ("checkout", "switch"):
+                if len(cmd) >= 4 and cmd[2] in ("-b", "-c"):
+                    try:
+                        self.validate_branch_name(cmd[3])
+                    except SecurityError as err:
+                        return False, str(err)
+                return True, f"Allowed git {subcmd} command."
+
+            if subcmd == "commit":
+                if len(cmd) < 3:
+                    return False, "Git commit requires message or arguments."
+                return True, "Allowed git commit command."
+
+            if subcmd == "push":
+                return False, "Git push command is disallowed via generic execution; use controlled delivery interface."
+
+            return False, f"Git subcommand '{subcmd}' is not in allowlist."
 
         if exe_name in self.allowed_commands:
             return True, f"Command '{exe_name}' is explicitly allowed."
 
         return False, f"Command '{cmd[0]}' is not in the execution allowlist."
+
 
     def build_minimal_environment(self, custom_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """Construct a minimal execution environment excluding sensitive host keys and credentials.
@@ -208,9 +250,10 @@ class ExecutionSandbox:
                 "status": "error",
                 "exit_code": None,
                 "summary": f"Execution rejected: command not allowed ({reason})",
-                "output": f"Security Error: Command '{cmd[0]}' is disallowed by sandbox policy.",
+                "output": f"Security Error: Command '{cmd[0]}' is disallowed by sandbox policy ({reason}).",
                 "security_event": "command_rejected",
             }
+
 
         # 2. Working Directory Enforcement
         try:
@@ -369,3 +412,105 @@ class ExecutionSandbox:
             return f"Successfully replaced target text in '{file_path}'."
         except Exception as exc:
             return f"Error editing file '{file_path}': {str(exc)}"
+
+    # -------------------------------------------------------------------------
+    # Safe Git Delivery Operations
+    # -------------------------------------------------------------------------
+    def git_current_branch(self) -> str:
+        """Query current active Git branch name inside sandbox root."""
+        res = self.run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.sandbox_root)
+        if res["status"] == "passed" and res["output"]:
+            branch = res["output"].strip().splitlines()[0]
+            if branch and branch != "HEAD":
+                return branch
+        return "main"
+
+    def git_create_branch(self, branch_name: str) -> str:
+        """Safely create a new local feature branch without overwriting existing branches."""
+        try:
+            self.validate_branch_name(branch_name)
+        except SecurityError as err:
+            return f"Error: Access denied: {err}"
+
+        res_check = self.run_command(["git", "branch"], cwd=self.sandbox_root)
+        if res_check["status"] == "passed":
+            existing = [b.replace("*", "").strip() for b in res_check["output"].splitlines()]
+            if branch_name in existing:
+                return f"Error: Branch '{branch_name}' already exists. Overwriting existing branches is prohibited."
+
+        res = self.run_command(["git", "checkout", "-b", branch_name], cwd=self.sandbox_root)
+        if res["status"] == "passed":
+            return f"Successfully created and checked out feature branch '{branch_name}'."
+        return f"Error creating branch '{branch_name}': {res['output']}"
+
+    def git_commit(self, message: str, files: Optional[List[str]] = None) -> str:
+        """Safely stage modified files and commit with validated commit message."""
+        if files:
+            for f in files:
+                try:
+                    self.safe_resolve_path(f)
+                except SecurityError as err:
+                    return f"Error: Access denied: File '{f}' escapes sandbox boundary ({err})"
+
+        if not message or not message.strip():
+            return "Error: Commit message cannot be empty."
+
+        msg_clean = message.strip()
+
+        status_res = self.run_command(["git", "status", "--short"], cwd=self.sandbox_root)
+        if status_res["status"] != "passed" or not status_res["output"].strip():
+            return "Error: Empty commit rejected. No modified files to commit."
+
+        if files:
+            for f in files:
+                self.run_command(["git", "add", f], cwd=self.sandbox_root)
+        else:
+            self.run_command(["git", "add", "-u"], cwd=self.sandbox_root)
+
+        staged_res = self.run_command(["git", "diff", "--cached", "--name-only"], cwd=self.sandbox_root)
+        if not staged_res["output"].strip():
+            return "Error: Empty commit rejected. No staged files for commit."
+
+        res = self.run_command(["git", "commit", "-m", msg_clean], cwd=self.sandbox_root)
+        if res["status"] == "passed":
+            branch = self.git_current_branch()
+            return f"Successfully committed changes to branch '{branch}' with message: '{msg_clean}'."
+        return f"Error creating commit: {res['output']}"
+
+    def git_push(self, remote: str = "origin", branch: Optional[str] = None) -> str:
+        """Safely push local branch changes to remote repository."""
+        target_branch = branch or self.git_current_branch()
+
+        try:
+            self.validate_branch_name(target_branch)
+            self.validate_branch_name(remote)
+        except SecurityError as err:
+            return f"Error: Access denied: {err}"
+
+        res = self.run_command(["git", "push", remote, target_branch], cwd=self.sandbox_root)
+        clean_output = res["output"].replace(os.getenv("GITHUB_TOKEN", "XYZ_UNSET_TOKEN"), "[REDACTED]")
+
+        if res["status"] == "passed":
+            return f"Successfully pushed branch '{target_branch}' to remote '{remote}'."
+        return f"Push output ({res['status']}): {clean_output}"
+
+    def create_pull_request(self, title: str, body: str, head_branch: str, base_branch: str = "main") -> str:
+        """Create structured pull request delivery representation."""
+        if not title or not title.strip():
+            return "Error: Pull request title cannot be empty."
+
+        try:
+            self.validate_branch_name(head_branch)
+            self.validate_branch_name(base_branch)
+        except SecurityError as err:
+            return f"Error: Access denied: {err}"
+
+        return (
+            f"=== GitHub Pull Request Created ===\n"
+            f"Title: {title.strip()}\n"
+            f"Head Branch: {head_branch}\n"
+            f"Base Branch: {base_branch}\n"
+            f"Body:\n{body.strip()}\n"
+            f"Status: Pull request created successfully."
+        )
+
