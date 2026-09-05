@@ -1,0 +1,12 @@
+README.md
+pyproject.toml
+app/__init__.py
+app/agent.py
+app/state.py
+app/tools.py
+autonomous_coding_agent.egg-info/PKG-INFO
+autonomous_coding_agent.egg-info/SOURCES.txt
+autonomous_coding_agent.egg-info/dependency_links.txt
+autonomous_coding_agent.egg-info/requires.txt
+autonomous_coding_agent.egg-info/top_level.txt
+tests/test_agent.py

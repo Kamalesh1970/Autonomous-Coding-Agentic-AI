@@ -1,4 +1,4 @@
-"""LangGraph Agent Loop for Phase 3 Planning and Task Decomposition Agent."""
+"""LangGraph Agent Loop for Phase 4 Structured Repository Retrieval Agent."""
 
 import os
 import sys
@@ -21,15 +21,16 @@ from app.tools import create_workspace_tools
 
 
 SYSTEM_PROMPT = (
-    "You are an autonomous software engineering assistant equipped with repository inspection "
-    "and dynamic planning tools. You are in READ-ONLY mode.\n\n"
+    "You are an autonomous software engineering assistant equipped with repository inspection, "
+    "structured context retrieval, and dynamic planning tools. You are in READ-ONLY mode.\n\n"
     "When given a software engineering goal:\n"
-    "1. Inspect the repository if initial context is needed.\n"
-    "2. Decompose complex goals into structured subtasks using `create_plan` with explicit dependencies.\n"
-    "3. Track progress using `update_task_status(task_id, status)` as you execute tasks.\n"
-    "4. If new repository observations contradict your assumptions or require strategy changes, "
-    "revise your plan using `revise_plan(new_tasks, reason)`.\n"
-    "5. Conclude with a comprehensive context-aware response when all tasks are complete."
+    "1. Decompose complex goals into structured subtasks using `create_plan` with explicit dependencies.\n"
+    "2. For specific subtasks, use `retrieve_relevant_context(query)` to identify relevant files "
+    "and retrieve surrounding code context instead of reading every file blindly.\n"
+    "3. Use `read_file(file_path)` for targeted deep dives when specific file details are needed.\n"
+    "4. Track progress using `update_task_status(task_id, status)` as tasks complete.\n"
+    "5. Revise your plan using `revise_plan(new_tasks, reason)` if repository evidence alters strategy.\n"
+    "6. Conclude with a comprehensive context-aware response when all tasks are complete."
 )
 
 
@@ -49,10 +50,11 @@ def get_default_llm() -> BaseChatModel:
 
 
 def sync_plan_from_messages(state: AgentState) -> AgentState:
-    """Helper to update state['plan'] based on planning tool calls in the conversation."""
+    """Helper to update state['plan'] and state['retrieved_context'] based on tool calls."""
     messages = state.get("messages", [])
     plan = state.get("plan")
     user_goal = state.get("user_goal", "")
+    retrieved_context = list(state.get("retrieved_context") or [])
 
     for msg in messages:
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
@@ -72,14 +74,19 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
                         raw_tasks = args.get("new_tasks", [])
                         reason = args.get("reason", "Plan revised")
                         plan = revise_plan_state(plan, raw_tasks, reason)
+                elif name == "retrieve_relevant_context":
+                    query = args.get("query", "")
+                    if query and query not in [r.get("query") for r in retrieved_context]:
+                        retrieved_context.append({"query": query})
 
     updated_state = dict(state)
     updated_state["plan"] = plan
+    updated_state["retrieved_context"] = retrieved_context
     return updated_state  # type: ignore
 
 
 def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = "."):
-    """Constructs and compiles the Phase 3 LangGraph planning agent loop.
+    """Constructs and compiles the Phase 4 LangGraph retrieval planning agent loop.
 
     Args:
         llm: Optional chat model instance. Defaults to ChatOpenAI configured via env.
@@ -95,7 +102,7 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
     llm_with_tools = llm.bind_tools(tools)
 
     def reason_node(state: AgentState) -> dict:
-        """Reasoning node that invokes the model with accumulated messages and plan context."""
+        """Reasoning node that invokes the model with accumulated messages and context."""
         state = sync_plan_from_messages(state)
         messages = list(state.get("messages", []))
         user_goal = state.get("user_goal", "")
@@ -114,6 +121,8 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
         res_dict = {"messages": [response]}
         if state.get("plan"):
             res_dict["plan"] = state["plan"]
+        if state.get("retrieved_context"):
+            res_dict["retrieved_context"] = state["retrieved_context"]
 
         if not state.get("messages") and user_goal:
             res_dict["messages"] = [HumanMessage(content=user_goal), response]
@@ -154,7 +163,7 @@ def run_agent(goal: str, workspace_root: str = ".", llm: BaseChatModel | None = 
         llm: Optional chat model (useful for passing mocked LLMs in tests).
 
     Returns:
-        Final state dictionary containing conversation history and plan.
+        Final state dictionary containing conversation history, plan, and retrieved context.
     """
     graph = build_agent_graph(llm=llm, workspace_root=workspace_root)
     initial_state = {
@@ -162,6 +171,7 @@ def run_agent(goal: str, workspace_root: str = ".", llm: BaseChatModel | None = 
         "workspace_root": workspace_root,
         "messages": [HumanMessage(content=goal)],
         "plan": None,
+        "retrieved_context": [],
     }
 
     final_state = graph.invoke(initial_state)

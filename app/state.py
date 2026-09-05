@@ -50,11 +50,13 @@ class AgentState(TypedDict, total=False):
         user_goal: The high-level objective provided by the user.
         workspace_root: Base directory path constraining file tool execution for safety.
         plan: Optional ExecutionPlan structured object tracking task decomposition and progress.
+        retrieved_context: Optional list of retrieved code context snippets and query metadata.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     user_goal: str
     workspace_root: str
     plan: ExecutionPlan | None
+    retrieved_context: list[dict] | None
 
 
 def create_plan_state(goal: str, raw_tasks: list[dict]) -> ExecutionPlan:

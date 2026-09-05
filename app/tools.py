@@ -1,6 +1,8 @@
-"""Minimal safe read-only repository and planning tools for Phase 3 Autonomous Coding Agent."""
+"""Minimal safe read-only repository, planning, and retrieval tools for Phase 4 Autonomous Coding Agent."""
 
+import ast
 import os
+import re
 import subprocess
 from pathlib import Path
 from langchain_core.tools import tool
@@ -246,6 +248,154 @@ def _git_diff_impl(workspace_root: str = ".", max_lines: int = 200) -> str:
         return f"Error executing git diff: {str(exc)}"
 
 
+def _retrieve_relevant_context_impl(
+    query: str,
+    directory: str = ".",
+    workspace_root: str = ".",
+    max_files: int = 3,
+    context_window_lines: int = 10,
+    max_total_chars: int = 4000,
+) -> str:
+    """Structured relevance ranking and surrounding code window extraction."""
+    if not query or not query.strip():
+        return "Error: Retrieval query cannot be empty."
+
+    try:
+        resolved_dir = safe_resolve_path(workspace_root, directory)
+    except ValueError as err:
+        return f"Error: {err}"
+
+    if not resolved_dir.exists():
+        return f"Error: Directory '{directory}' does not exist."
+
+    base = Path(workspace_root).resolve()
+    query_tokens = [token.lower() for token in re.findall(r"\w+", query) if len(token) > 1]
+    if not query_tokens:
+        query_tokens = [query.lower().strip()]
+
+    scored_files = []
+
+    try:
+        for root, dirs, files in os.walk(resolved_dir, followlinks=False):
+            if ".git" in dirs:
+                dirs.remove(".git")
+            if "__pycache__" in dirs:
+                dirs.remove("__pycache__")
+            if ".venv" in dirs:
+                dirs.remove(".venv")
+
+            for file in sorted(files):
+                file_path = Path(root) / file
+                if _is_binary_file(file_path):
+                    continue
+
+                try:
+                    rel_path_str = str(file_path.relative_to(base))
+                except ValueError:
+                    continue
+
+                path_lower = rel_path_str.lower()
+                path_score = sum(10.0 for token in query_tokens if token in path_lower)
+
+                try:
+                    content = file_path.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    continue
+
+                lines = content.splitlines()
+                content_score = 0.0
+                match_indices = []
+
+                for idx, line in enumerate(lines, start=1):
+                    line_lower = line.lower()
+                    matches_in_line = sum(1 for token in query_tokens if token in line_lower)
+                    if matches_in_line > 0:
+                        content_score += 3.0 * matches_in_line
+                        match_indices.append(idx)
+
+                # Python AST Symbol Definition Matching
+                symbol_score = 0.0
+                if file_path.suffix == ".py":
+                    try:
+                        tree = ast.parse(content)
+                        for node in ast.walk(tree):
+                            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                                name_lower = node.name.lower()
+                                if any(token in name_lower for token in query_tokens):
+                                    symbol_score += 5.0
+                                    if hasattr(node, "lineno"):
+                                        match_indices.append(node.lineno)
+                    except Exception:
+                        pass
+
+                total_score = path_score + content_score + symbol_score
+
+                if total_score > 0 and match_indices:
+                    scored_files.append(
+                        {
+                            "rel_path": rel_path_str,
+                            "score": total_score,
+                            "lines": lines,
+                            "matches": sorted(list(set(match_indices))),
+                        }
+                    )
+
+        if not scored_files:
+            return f"No relevant code context found for query: '{query}'"
+
+        # Sort descending by relevance score
+        scored_files.sort(key=lambda x: x["score"], reverse=True)
+        top_files = scored_files[:max_files]
+
+        output_sections = [f"=== Retrieved Relevant Context for Query: '{query}' ==="]
+
+        for rank, item in enumerate(top_files, start=1):
+            rel_path = item["rel_path"]
+            score = item["score"]
+            lines = item["lines"]
+            total_lines = len(lines)
+            matches = item["matches"]
+
+            # Merge overlapping surrounding line windows
+            windows = []
+            for m in matches:
+                start = max(1, m - context_window_lines)
+                end = min(total_lines, m + context_window_lines)
+
+                if not windows:
+                    windows.append([start, end])
+                else:
+                    last = windows[-1]
+                    if start <= last[1] + 1:
+                        last[1] = max(last[1], end)
+                    else:
+                        windows.append([start, end])
+
+            section_text = [f"Rank {rank}: {rel_path} (Relevance Score: {score:.1f})"]
+            for w in windows:
+                section_text.append(f"Lines {w[0]}–{w[1]}:")
+                section_text.append("-" * 40)
+                for line_idx in range(w[0], w[1] + 1):
+                    line_str = lines[line_idx - 1] if line_idx <= total_lines else ""
+                    section_text.append(f"{line_idx:4d}: {line_str}")
+                section_text.append("-" * 40)
+
+            output_sections.append("\n".join(section_text))
+
+        full_output = "\n\n".join(output_sections)
+
+        if len(full_output) > max_total_chars:
+            full_output = (
+                full_output[:max_total_chars]
+                + f"\n\n... (retrieved context output truncated at {max_total_chars} characters)"
+            )
+
+        return full_output
+
+    except Exception as exc:
+        return f"Error retrieving context for '{query}': {str(exc)}"
+
+
 # -----------------------------------------------------------------------------
 # Standalone Read-Only Repository Tools
 # -----------------------------------------------------------------------------
@@ -307,6 +457,20 @@ def git_diff() -> str:
         Git diff output, or a message if no diffs exist.
     """
     return _git_diff_impl(workspace_root=".")
+
+
+@tool
+def retrieve_relevant_context(query: str, directory: str = ".") -> str:
+    """Search and retrieve the most relevant repository code files and surrounding code context for a query.
+
+    Args:
+        query: Goal or search query describing the feature, function, or concept.
+        directory: Relative directory path inside workspace to search (defaults to ".").
+
+    Returns:
+        Ranked list of relevant files with bounded surrounding code snippets and line numbers.
+    """
+    return _retrieve_relevant_context_impl(query=query, directory=directory, workspace_root=".")
 
 
 # -----------------------------------------------------------------------------
@@ -374,7 +538,7 @@ def revise_plan(new_tasks: list[dict], reason: str) -> str:
 
 
 def create_workspace_tools(workspace_root: str = "."):
-    """Create read-only repository tools and planning tools bound to a workspace root.
+    """Create read-only repository tools, retrieval tool, and planning tools bound to workspace root.
 
     Args:
         workspace_root: Path to the root workspace directory.
@@ -438,12 +602,28 @@ def create_workspace_tools(workspace_root: str = "."):
         """
         return _git_diff_impl(workspace_root=workspace_root)
 
+    @tool
+    def retrieve_relevant_context(query: str, directory: str = ".") -> str:
+        """Search and retrieve the most relevant repository code files and surrounding code context for a query.
+
+        Args:
+            query: Goal or search query describing the feature, function, or concept.
+            directory: Relative directory path inside workspace to search (defaults to ".").
+
+        Returns:
+            Ranked list of relevant files with bounded surrounding code snippets and line numbers.
+        """
+        return _retrieve_relevant_context_impl(
+            query=query, directory=directory, workspace_root=workspace_root
+        )
+
     return [
         list_files,
         read_file,
         search_code,
         git_status,
         git_diff,
+        retrieve_relevant_context,
         create_plan,
         update_task_status,
         revise_plan,

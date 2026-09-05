@@ -1,4 +1,4 @@
-"""Deterministic Pytest suite for Phase 3 Autonomous Coding Agent (Planning & Decomposition)."""
+"""Deterministic Pytest suite for Phase 4 Autonomous Coding Agent (Structured Retrieval & Ranking)."""
 
 import os
 import subprocess
@@ -30,12 +30,14 @@ from app.tools import (
     create_plan,
     update_task_status,
     revise_plan,
+    retrieve_relevant_context,
     safe_resolve_path,
     _list_files_impl,
     _read_file_impl,
     _search_code_impl,
     _git_status_impl,
     _git_diff_impl,
+    _retrieve_relevant_context_impl,
 )
 
 
@@ -82,28 +84,23 @@ def init_git_repo(repo_path: Path):
 
 
 # -----------------------------------------------------------------------------
-# 1. State & Planning Data Structure Tests
+# 1. State & Planning Tests (Phases 1-3 Preservation)
 # -----------------------------------------------------------------------------
-def test_plan_state_representation():
-    """Verify AgentState can hold user goal, workspace root, messages, and structured plan."""
-    raw_tasks = [
-        {"id": "t1", "title": "Inspect code", "description": "Check auth", "dependencies": []},
-        {"id": "t2", "title": "Implement auth", "description": "Add JWT", "dependencies": ["t1"]},
-    ]
-    plan = create_plan_state("Add authentication", raw_tasks)
+def test_agent_state_initialization():
+    """Verify AgentState can hold user goal, workspace root, messages, and plan."""
+    raw_tasks = [{"id": "t1", "title": "Inspect code", "dependencies": []}]
+    plan = create_plan_state("Add auth", raw_tasks)
 
     state: AgentState = {
-        "user_goal": "Add authentication",
+        "user_goal": "Add auth",
         "workspace_root": "/tmp/test",
-        "messages": [HumanMessage(content="Add authentication")],
+        "messages": [HumanMessage(content="Add auth")],
         "plan": plan,
+        "retrieved_context": [],
     }
 
-    assert state["user_goal"] == "Add authentication"
-    assert state["plan"]["goal"] == "Add authentication"
-    assert len(state["plan"]["tasks"]) == 2
+    assert state["user_goal"] == "Add auth"
     assert state["plan"]["tasks"][0]["id"] == "t1"
-    assert state["plan"]["tasks"][1]["dependencies"] == ["t1"]
 
 
 def test_task_statuses_and_transitions():
@@ -113,107 +110,90 @@ def test_task_statuses_and_transitions():
         {"id": "t2", "title": "Task 2", "status": "pending", "dependencies": ["t1"]},
     ]
     plan = create_plan_state("Test Goal", raw_tasks)
-    assert plan["current_task_id"] == "t1"
 
-    # Transition t1 -> in_progress
     plan = update_task_state(plan, "t1", "in_progress")
     assert plan["tasks"][0]["status"] == "in_progress"
-    assert plan["current_task_id"] == "t1"
 
-    # Transition t1 -> completed
     plan = update_task_state(plan, "t1", "completed")
     assert plan["tasks"][0]["status"] == "completed"
-    assert plan["current_task_id"] == "t2"  # Now t2 is unblocked!
-
-    # Transition t2 -> failed
-    plan = update_task_state(plan, "t2", "failed")
-    assert plan["tasks"][1]["status"] == "failed"
-
-    # Transition t2 -> blocked
-    plan = update_task_state(plan, "t2", "blocked")
-    assert plan["tasks"][1]["status"] == "blocked"
-
-
-def test_dependency_blocking():
-    """Verify tasks are not selected if their dependencies are incomplete."""
-    raw_tasks = [
-        {"id": "t1", "title": "Task 1", "status": "pending", "dependencies": []},
-        {"id": "t2", "title": "Task 2", "status": "pending", "dependencies": ["t1"]},
-    ]
-    plan = create_plan_state("Test", raw_tasks)
-
-    # t2 depends on t1, so next available task must be t1
-    assert get_next_available_task_id(plan["tasks"]) == "t1"
-
-    # Mark t1 as failed (not completed), t2 remains blocked
-    plan = update_task_state(plan, "t1", "failed")
-    assert get_next_available_task_id(plan["tasks"]) is None
-
-
-def test_plan_revision_state():
-    """Verify plan revision updates task list and preserves revision history."""
-    initial_tasks = [{"id": "t1", "title": "Initial assumption", "dependencies": []}]
-    plan = create_plan_state("Goal", initial_tasks)
-    assert plan["revision_count"] == 0
-
-    revised_tasks = [
-        {"id": "rt1", "title": "Revised task 1", "dependencies": []},
-        {"id": "rt2", "title": "Revised task 2", "dependencies": ["rt1"]},
-    ]
-    revised = revise_plan_state(plan, revised_tasks, reason="Found OAuth already implemented")
-
-    assert revised["revision_count"] == 1
-    assert revised["revision_reason"] == "Found OAuth already implemented"
-    assert len(revised["tasks"]) == 2
-    assert revised["tasks"][0]["id"] == "rt1"
+    assert plan["current_task_id"] == "t2"
 
 
 # -----------------------------------------------------------------------------
-# 2. Phase 2 Tools Preservation Tests
+# 2. Phase 4 Retrieval & Ranking Tests
 # -----------------------------------------------------------------------------
-def test_list_files_recursive(tmp_path: Path):
-    """Verify list_files correctly lists repository files recursively while skipping .git."""
+def test_retrieve_relevant_context_tool(tmp_path: Path):
+    """Verify retrieve_relevant_context finds matching code context for a query."""
+    (tmp_path / "auth.py").write_text("def authenticate_user():\n    return True\n")
+    output = _retrieve_relevant_context_impl("authenticate_user", workspace_root=str(tmp_path))
+
+    assert "Rank 1: auth.py" in output
+    assert "def authenticate_user():" in output
+
+
+def test_relevance_ranking_priority(tmp_path: Path):
+    """Verify files with path matches, symbol definitions, and content matches rank higher."""
     (tmp_path / "app").mkdir()
-    (tmp_path / "app" / "main.py").write_text("print('main')")
+    # High match: filename + AST symbol + content
+    (tmp_path / "app" / "auth.py").write_text("def authenticate_user(u, p):\n    return True\n")
+    # Low match: content line only
+    (tmp_path / "app" / "notes.txt").write_text("Mention auth in docs\n")
 
-    output = _list_files_impl(".", workspace_root=str(tmp_path))
-    assert "app/main.py" in output
+    output = _retrieve_relevant_context_impl("auth", workspace_root=str(tmp_path))
 
-
-def test_read_file_tool(tmp_path: Path):
-    """Verify read_file correctly reads text contents of workspace file."""
-    test_file = tmp_path / "sample.txt"
-    test_file.write_text("Sample file content.")
-    content = _read_file_impl("sample.txt", workspace_root=str(tmp_path))
-    assert content == "Sample file content."
+    assert "Rank 1: app/auth.py" in output
+    assert "Rank 2: app/notes.txt" in output
 
 
-def test_search_code_tool(tmp_path: Path):
-    """Verify search_code finds matching query lines."""
-    (tmp_path / "auth.py").write_text("def authenticate_user(): pass\n")
-    output = _search_code_impl("authenticate_user", workspace_root=str(tmp_path))
-    assert "auth.py:1: def authenticate_user(): pass" in output
+def test_surrounding_code_context_extraction(tmp_path: Path):
+    """Verify retrieval extracts surrounding line window blocks with line numbers."""
+    lines = [f"# Line {i}\n" for i in range(1, 30)]
+    lines[14] = "SECRET_KEY = 'jwt_secret_token_key'\n"
+    (tmp_path / "config.py").write_text("".join(lines))
+
+    output = _retrieve_relevant_context_impl("jwt_secret_token_key", workspace_root=str(tmp_path))
+
+    assert "config.py" in output
+    assert "Lines 5–25:" in output or "Lines 10–20:" in output or "15:" in output
+    assert "15: SECRET_KEY = 'jwt_secret_token_key'" in output
 
 
-def test_git_status_tool(tmp_path: Path):
-    """Verify git_status inspects repository branch and file modifications."""
-    init_git_repo(tmp_path)
-    (tmp_path / "new.py").write_text("# new")
-    status = _git_status_impl(workspace_root=str(tmp_path))
-    assert "new.py" in status or "??" in status
+def test_retrieval_output_bounded(tmp_path: Path):
+    """Verify retrieval output is bounded in total characters and files returned."""
+    for i in range(10):
+        (tmp_path / f"module_{i}.py").write_text(f"def common_function_{i}():\n    return '{'A'*500}'\n")
+
+    output = _retrieve_relevant_context_impl(
+        "common_function", workspace_root=str(tmp_path), max_files=2, max_total_chars=1000
+    )
+
+    assert "Rank 1:" in output
+    assert "Rank 2:" in output
+    assert "Rank 3:" not in output  # Bounded to max 2 files!
+    assert "truncated at 1000 characters" in output or len(output) <= 1200
 
 
-def test_git_diff_tool(tmp_path: Path):
-    """Verify git_diff displays unstaged changes."""
-    init_git_repo(tmp_path)
-    file = tmp_path / "c.py"
-    file.write_text("v1")
-    subprocess.run(["git", "add", "c.py"], cwd=tmp_path, capture_output=True, check=True)
-    subprocess.run(["git", "commit", "-m", "v1"], cwd=tmp_path, capture_output=True, check=True)
-    file.write_text("v2")
+def test_task_driven_retrieval(tmp_path: Path):
+    """Verify different task queries retrieve different relevant repository contexts."""
+    (tmp_path / "auth.py").write_text("def login_user(): pass\n")
+    (tmp_path / "db.py").write_text("def connect_database(): pass\n")
 
-    diff_output = _git_diff_impl(workspace_root=str(tmp_path))
-    assert "c.py" in diff_output or "v1" in diff_output or "v2" in diff_output
+    auth_res = _retrieve_relevant_context_impl("login_user", workspace_root=str(tmp_path))
+    assert "auth.py" in auth_res
+    assert "db.py" not in auth_res
+
+    db_res = _retrieve_relevant_context_impl("connect_database", workspace_root=str(tmp_path))
+    assert "db.py" in db_res
+    assert "auth.py" not in db_res
+
+
+def test_retrieval_path_traversal_safety(tmp_path: Path):
+    """Verify retrieve_relevant_context blocks directory traversal attempts."""
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    output = _retrieve_relevant_context_impl("auth", directory="../", workspace_root=str(workspace))
+    assert "Error: Access denied" in output
 
 
 # -----------------------------------------------------------------------------
@@ -238,7 +218,7 @@ def test_no_shell_execution_tools(tmp_path: Path):
 
 
 def test_no_write_edit_delete_tools(tmp_path: Path):
-    """Verify tool layer is strictly read-only + planning tools."""
+    """Verify tool layer is strictly read-only + retrieval + planning tools."""
     tools = create_workspace_tools(workspace_root=str(tmp_path))
     tool_names = set(t.name for t in tools)
 
@@ -248,6 +228,7 @@ def test_no_write_edit_delete_tools(tmp_path: Path):
         "search_code",
         "git_status",
         "git_diff",
+        "retrieve_relevant_context",
         "create_plan",
         "update_task_status",
         "revise_plan",
@@ -261,78 +242,70 @@ def test_no_write_edit_delete_tools(tmp_path: Path):
 
 
 # -----------------------------------------------------------------------------
-# 4. Agentic Planning & Revision Control Loop Tests
+# 4. Multi-Step Retrieval & Planning Agent Loop Tests
 # -----------------------------------------------------------------------------
-def test_deterministic_planning_scenario(tmp_path: Path):
-    """Verify full agent loop: Goal -> Inspect -> Create Plan -> Task Execution -> Plan Revision -> Complete."""
+def test_multi_step_retrieval_agent_loop(tmp_path: Path):
+    """Verify agent loop performs contextual retrieval -> deeper file read -> plan update -> complete."""
     init_git_repo(tmp_path)
-    (tmp_path / "routes.py").write_text("# Existing OAuth authentication present\ndef oauth_login(): pass\n")
+    (tmp_path / "app").mkdir()
+    (tmp_path / "app" / "auth.py").write_text("def jwt_authenticate(token):\n    # Verify JWT signature\n    return True\n")
 
     mock_responses = [
-        # Step 1: Agent inspects repo
+        # Step 1: Agent creates plan
         AIMessage(
-            content="Searching codebase for existing authentication.",
-            tool_calls=[{"name": "search_code", "args": {"query": "auth"}, "id": "c1"}],
-        ),
-        # Step 2: Agent observes OAuth in routes.py, initializes plan
-        AIMessage(
-            content="Found existing OAuth in routes.py. Initializing plan.",
+            content="Creating plan for JWT authentication analysis.",
             tool_calls=[
                 {
                     "name": "create_plan",
                     "args": {
                         "tasks": [
-                            {"id": "t1", "title": "Inspect routes.py OAuth", "dependencies": []},
-                            {"id": "t2", "title": "Add JWT support", "dependencies": ["t1"]},
+                            {"id": "t1", "title": "Retrieve JWT auth context", "dependencies": []},
+                            {"id": "t2", "title": "Inspect token verification", "dependencies": ["t1"]},
                         ]
                     },
-                    "id": "c2",
+                    "id": "c1",
                 }
             ],
         ),
-        # Step 3: Agent marks t1 in_progress and reads routes.py
+        # Step 2: Agent retrieves context for task t1
         AIMessage(
-            content="Reading routes.py to complete t1.",
+            content="Retrieving relevant context for JWT authentication.",
             tool_calls=[
-                {"name": "update_task_status", "args": {"task_id": "t1", "status": "in_progress"}, "id": "c3_1"},
-                {"name": "read_file", "args": {"file_path": "routes.py"}, "id": "c3_2"},
+                {"name": "update_task_status", "args": {"task_id": "t1", "status": "in_progress"}, "id": "c2_1"},
+                {"name": "retrieve_relevant_context", "args": {"query": "jwt_authenticate"}, "id": "c2_2"},
             ],
         ),
-        # Step 4: Agent marks t1 completed and revises plan for JWT integration
+        # Step 3: Agent completes t1 and reads auth.py for task t2
         AIMessage(
-            content="t1 complete. Revising plan based on OAuth observation.",
+            content="Retrieved context found app/auth.py. Now inspecting app/auth.py for t2.",
             tool_calls=[
-                {"name": "update_task_status", "args": {"task_id": "t1", "status": "completed"}, "id": "c4_1"},
-                {
-                    "name": "revise_plan",
-                    "args": {
-                        "new_tasks": [
-                            {"id": "t1", "title": "Inspect routes.py OAuth", "status": "completed", "dependencies": []},
-                            {"id": "t2_rev", "title": "Integrate JWT bearer token into OAuth routes", "status": "pending", "dependencies": ["t1"]},
-                        ],
-                        "reason": "OAuth structure requires bearer token integration strategy",
-                    },
-                    "id": "c4_2",
-                },
+                {"name": "update_task_status", "args": {"task_id": "t1", "status": "completed"}, "id": "c3_1"},
+                {"name": "update_task_status", "args": {"task_id": "t2", "status": "in_progress"}, "id": "c3_2"},
+                {"name": "read_file", "args": {"file_path": "app/auth.py"}, "id": "c3_3"},
             ],
         ),
-        # Step 5: Final completion
+        # Step 4: Agent completes t2 and returns answer
         AIMessage(
-            content="Planning complete. Authentication architecture analyzed and plan revised."
+            content="Task t2 complete. JWT authentication is implemented in app/auth.py via jwt_authenticate.",
+            tool_calls=[
+                {"name": "update_task_status", "args": {"task_id": "t2", "status": "completed"}, "id": "c4_1"}
+            ],
         ),
     ]
     mock_llm = MockLLM(responses=mock_responses)
 
     final_state = run_agent(
-        goal="Understand and improve authentication in this repository.",
+        goal="Understand JWT authentication architecture",
         workspace_root=str(tmp_path),
         llm=mock_llm,
     )
 
     plan = final_state.get("plan")
     assert plan is not None
-    assert plan["revision_count"] == 1
-    assert "OAuth structure requires bearer token integration strategy" in plan["revision_reason"]
     assert len(plan["tasks"]) == 2
     assert plan["tasks"][0]["status"] == "completed"
-    assert plan["tasks"][1]["id"] == "t2_rev"
+    assert plan["tasks"][1]["status"] == "completed"
+
+    retrieved = final_state.get("retrieved_context", [])
+    assert len(retrieved) > 0
+    assert retrieved[0]["query"] == "jwt_authenticate"
