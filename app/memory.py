@@ -50,17 +50,40 @@ def serialize_message(msg: BaseMessage) -> dict[str, Any]:
     msg_type = msg.__class__.__name__
     content = getattr(msg, "content", "")
     tool_calls = getattr(msg, "tool_calls", None)
+    invalid_tool_calls = getattr(msg, "invalid_tool_calls", None)
+    additional_kwargs = getattr(msg, "additional_kwargs", None)
+    response_metadata = getattr(msg, "response_metadata", None)
     tool_call_id = getattr(msg, "tool_call_id", None)
     name = getattr(msg, "name", None)
+    msg_id = getattr(msg, "id", None)
 
     serialized: dict[str, Any] = {"type": msg_type, "content": content}
 
     if tool_calls is not None:
         serialized["tool_calls"] = tool_calls
+    if invalid_tool_calls is not None:
+        serialized["invalid_tool_calls"] = invalid_tool_calls
+
+    add_kwargs = dict(additional_kwargs) if additional_kwargs else {}
+    if msg_type == "AIMessage" and "thought_signature" not in add_kwargs:
+        if response_metadata and isinstance(response_metadata, dict) and response_metadata.get("thought_signature"):
+            add_kwargs["thought_signature"] = response_metadata["thought_signature"]
+        elif tool_calls:
+            for tc in tool_calls:
+                if isinstance(tc, dict) and tc.get("thought_signature"):
+                    add_kwargs["thought_signature"] = tc["thought_signature"]
+                    break
+
+    if add_kwargs:
+        serialized["additional_kwargs"] = add_kwargs
+    if response_metadata:
+        serialized["response_metadata"] = response_metadata
     if tool_call_id is not None:
         serialized["tool_call_id"] = tool_call_id
     if name is not None:
         serialized["name"] = name
+    if msg_id is not None:
+        serialized["id"] = msg_id
 
     return serialized
 
@@ -68,27 +91,68 @@ def serialize_message(msg: BaseMessage) -> dict[str, Any]:
 def deserialize_message(data: dict[str, Any]) -> BaseMessage:
     """Reconstructs a LangChain BaseMessage instance from a serialized dictionary."""
     msg_type = data.get("type", "HumanMessage")
-    content = str(data.get("content", ""))
+    content = data.get("content", "")
     tool_calls = data.get("tool_calls")
+    invalid_tool_calls = data.get("invalid_tool_calls")
+    additional_kwargs = data.get("additional_kwargs")
+    response_metadata = data.get("response_metadata")
     tool_call_id = data.get("tool_call_id")
     name = data.get("name")
+    msg_id = data.get("id")
 
     if msg_type == "HumanMessage":
-        return HumanMessage(content=content)
-    elif msg_type == "AIMessage":
         kwargs: dict[str, Any] = {"content": content}
+        if name:
+            kwargs["name"] = name
+        if msg_id:
+            kwargs["id"] = msg_id
+        return HumanMessage(**kwargs)
+    elif msg_type == "AIMessage":
+        kwargs = {"content": content}
         if tool_calls is not None:
             kwargs["tool_calls"] = tool_calls
+        if invalid_tool_calls is not None:
+            kwargs["invalid_tool_calls"] = invalid_tool_calls
+
+        add_kwargs = dict(additional_kwargs) if additional_kwargs is not None else {}
+        if "thought_signature" not in add_kwargs:
+            if response_metadata and isinstance(response_metadata, dict) and response_metadata.get("thought_signature"):
+                add_kwargs["thought_signature"] = response_metadata["thought_signature"]
+            elif tool_calls:
+                for tc in tool_calls:
+                    if isinstance(tc, dict) and tc.get("thought_signature"):
+                        add_kwargs["thought_signature"] = tc["thought_signature"]
+                        break
+        kwargs["additional_kwargs"] = add_kwargs
+
+        if response_metadata is not None:
+            kwargs["response_metadata"] = response_metadata
+        if name:
+            kwargs["name"] = name
+        if msg_id:
+            kwargs["id"] = msg_id
         return AIMessage(**kwargs)
     elif msg_type == "ToolMessage":
         kwargs = {"content": content, "tool_call_id": tool_call_id or "call_default"}
         if name is not None:
             kwargs["name"] = name
+        if additional_kwargs is not None:
+            kwargs["additional_kwargs"] = additional_kwargs
+        if response_metadata is not None:
+            kwargs["response_metadata"] = response_metadata
+        if msg_id:
+            kwargs["id"] = msg_id
         return ToolMessage(**kwargs)
     elif msg_type == "SystemMessage":
-        return SystemMessage(content=content)
+        kwargs = {"content": content}
+        if name:
+            kwargs["name"] = name
+        if msg_id:
+            kwargs["id"] = msg_id
+        return SystemMessage(**kwargs)
     else:
-        return HumanMessage(content=content)
+        return HumanMessage(content=str(content))
+
 
 
 def serialize_state(state: AgentState, status: str = "running") -> dict[str, Any]:

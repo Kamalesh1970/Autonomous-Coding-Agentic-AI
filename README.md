@@ -63,9 +63,50 @@ Every task execution produces a unambiguous, explicit final outcome status:
 
 ---
 
+## ⚙️ Configurable LLM Providers
+
+The agent supports multiple LLM providers without architectural changes:
+
+* **Google Gemini** (`LLM_PROVIDER=gemini`)
+* **OpenRouter** (`LLM_PROVIDER=openrouter`)
+* **OpenAI** (`LLM_PROVIDER=openai`)
+
+### Configuration Examples (`.env`)
+
+**Using Gemini (with Automatic Key Failover & OpenRouter Fallback):**
+```bash
+LLM_PROVIDER=gemini
+GEMINI_API_KEY_1=your_first_gemini_key
+GEMINI_API_KEY_2=your_second_gemini_key
+GEMINI_API_KEY_3=your_third_gemini_key
+LLM_MODEL=gemini-3.6-flash
+
+# Optional OpenRouter fallback if all Gemini keys fail
+OPENROUTER_API_KEY=your_openrouter_key
+```
+
+**Using OpenRouter:**
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_API_KEY=your_openrouter_api_key
+LLM_MODEL=anthropic/claude-3.5-sonnet
+```
+
+**Using OpenAI:**
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_openai_api_key
+LLM_MODEL=gpt-4o-mini
+```
+
+---
+
 ## 🛠️ CLI Usage
 
 ```bash
+# Execute agent with configured provider
+python -m app.agent "Fix the failing calculator test." ~/agent-test-repo
+
 # Execute single-agent benchmark suite
 python -m app.benchmark --mode single_agent --retrieval hybrid --runs 3 --export-json results.json --export-csv results.csv
 
@@ -78,9 +119,13 @@ python -m app.benchmark --mode multi_agent --retrieval lexical --runs 1 --export
 ## 🧪 Running Pytest Suite
 
 ```bash
+# Run LLM provider selection test suite
+pytest -v tests/test_llm_provider.py
+
 # Run Phase 15 end-to-end integration test suite
 pytest -v tests/test_end_to_end.py
 
-# Run complete project test suite (180+ tests)
+# Run complete project test suite
 pytest -v
 ```
+

@@ -217,7 +217,7 @@ class ExecutionSandbox:
 
         if custom_env:
             for k, v in custom_env.items():
-                if k not in ("OPENAI_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "SECRET_KEY"):
+                if k not in ("OPENAI_API_KEY", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3", "OPENROUTER_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "SECRET_KEY"):
                     clean_env[k] = v
 
         return clean_env

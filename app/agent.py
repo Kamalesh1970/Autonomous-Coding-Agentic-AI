@@ -2,7 +2,7 @@
 
 import os
 import sys
-from typing import Literal
+from typing import Any, Literal
 from dotenv import load_dotenv
 
 from langchain_core.messages import (
@@ -55,19 +55,250 @@ SYSTEM_PROMPT = (
 )
 
 
-def get_default_llm() -> BaseChatModel:
-    """Initialize the default LLM using environment variables."""
-    load_dotenv()
-    api_key = os.getenv("OPENAI_API_KEY")
-    model_name = os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini")
+def is_retryable_error(error: Exception) -> bool:
+    """Classify whether an exception is a retryable provider error."""
+    err_str = str(error).lower()
+    
+    # Non-retryable configuration errors
+    non_retryable_patterns = [
+        "404", "not_found", "no longer available", "invalid model",
+        "400", "invalid_argument", "malformed request", "thought_signature"
+    ]
+    for pattern in non_retryable_patterns:
+        if pattern in err_str:
+            return False
 
-    if not api_key or api_key == "your_openai_api_key_here":
-        raise ValueError(
-            "OPENAI_API_KEY environment variable is not configured. "
-            "Please set a valid key in .env or provide a mock LLM for testing."
+    # Retryable provider errors
+    retryable_patterns = [
+        "429", "quota", "rate limit", "resource_exhausted",
+        "500", "502", "503", "504", "unavailable",
+        "invalid_api_key", "unauthorized", "401", "403", "key"
+    ]
+    for pattern in retryable_patterns:
+        if pattern in err_str:
+            return True
+
+    return False
+
+
+class GeminiChatOpenAI(ChatOpenAI):
+    """ChatOpenAI variant tailored for Google Gemini's OpenAI-compatible endpoint that preserves additional_kwargs and satisfies schema rules (no null strings)."""
+
+    def _get_request_payload(self, messages: list[BaseMessage], **kwargs: Any) -> dict[str, Any]:
+        payload = super()._get_request_payload(messages, **kwargs)
+        payload_messages = payload.get("messages", [])
+        for orig_msg, msg_dict in zip(messages, payload_messages):
+            if isinstance(orig_msg, AIMessage):
+                sig = getattr(orig_msg, "additional_kwargs", {}).get("thought_signature") if hasattr(orig_msg, "additional_kwargs") and orig_msg.additional_kwargs else None
+                if not sig and getattr(orig_msg, "response_metadata", None):
+                    sig = orig_msg.response_metadata.get("thought_signature")
+                if not sig and getattr(orig_msg, "tool_calls", None):
+                    for tc in orig_msg.tool_calls:
+                        if isinstance(tc, dict):
+                            if tc.get("thought_signature"):
+                                sig = tc.get("thought_signature")
+                                break
+                            elif isinstance(tc.get("args"), dict) and tc["args"].get("thought_signature"):
+                                sig = tc["args"].get("thought_signature")
+                                break
+
+                if sig:
+                    msg_dict["thought_signature"] = sig
+                    if not getattr(orig_msg, "additional_kwargs", None):
+                        orig_msg.additional_kwargs = {}
+                    orig_msg.additional_kwargs["thought_signature"] = sig
+
+                if getattr(orig_msg, "additional_kwargs", None):
+                    for k, v in orig_msg.additional_kwargs.items():
+                        if k not in msg_dict:
+                            msg_dict[k] = v
+                if orig_msg.tool_calls and "tool_calls" in msg_dict:
+                    for orig_tc, dict_tc in zip(orig_msg.tool_calls, msg_dict["tool_calls"]):
+                        if isinstance(orig_tc, dict):
+                            for k, v in orig_tc.items():
+                                if k not in ("name", "args", "id", "type"):
+                                    dict_tc[k] = v
+                                    if "function" in dict_tc and isinstance(dict_tc["function"], dict):
+                                        dict_tc["function"][k] = v
+                        if sig and isinstance(dict_tc, dict):
+                            dict_tc["thought_signature"] = sig
+                            if "function" in dict_tc and isinstance(dict_tc["function"], dict):
+                                dict_tc["function"]["thought_signature"] = sig
+
+        for msg in payload_messages:
+            if msg.get("content") is None:
+                msg["content"] = ""
+            keys_to_remove = [k for k, v in msg.items() if v is None and k != "content"]
+            for k in keys_to_remove:
+                del msg[k]
+            if "tool_calls" in msg and isinstance(msg["tool_calls"], list):
+                for tc in msg["tool_calls"]:
+                    if isinstance(tc, dict):
+                        tc_none_keys = [k for k, v in tc.items() if v is None]
+                        for k in tc_none_keys:
+                            del tc[k]
+                        if "function" in tc and isinstance(tc["function"], dict):
+                            fn_none_keys = [k for k, v in tc["function"].items() if v is None]
+                            for k in fn_none_keys:
+                                del tc["function"][k]
+
+        return payload
+
+
+class FailoverChatModel(BaseChatModel):
+    """ChatModel wrapper that manages key failover and provider fallback transparently."""
+
+    candidates: list[Any]
+
+    def __init__(self, candidates: list[Any]):
+        super().__init__(candidates=candidates)
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        last_error = None
+        for i, candidate in enumerate(self.candidates):
+            try:
+                if hasattr(candidate, "_generate"):
+                    return candidate._generate(messages, stop=stop, run_manager=run_manager, **kwargs)
+                elif hasattr(candidate, "invoke"):
+                    res = candidate.invoke(messages, config=run_manager, **kwargs)
+                    from langchain_core.outputs import ChatGeneration, ChatResult
+                    if isinstance(res, AIMessage):
+                        return ChatResult(generations=[ChatGeneration(message=res)])
+                    return res
+            except Exception as e:
+                last_error = e
+                if is_retryable_error(e) and i < len(self.candidates) - 1:
+                    print(f"Provider attempt {i + 1} failed with retryable error; trying next configured option.")
+                    continue
+                raise e
+        if last_error:
+            raise last_error
+        raise RuntimeError("No candidate models configured for FailoverChatModel.")
+
+    def invoke(self, input, config=None, **kwargs):
+        last_error = None
+        for i, candidate in enumerate(self.candidates):
+            try:
+                return candidate.invoke(input, config=config, **kwargs)
+            except Exception as e:
+                last_error = e
+                if is_retryable_error(e) and i < len(self.candidates) - 1:
+                    print(f"Provider attempt {i + 1} failed with retryable error; trying next configured option.")
+                    continue
+                raise e
+        if last_error:
+            raise last_error
+        raise RuntimeError("No candidate models configured for FailoverChatModel.")
+
+    def bind_tools(self, tools, **kwargs):
+        bound_candidates = [c.bind_tools(tools, **kwargs) for c in self.candidates]
+        return FailoverChatModel(candidates=bound_candidates)
+
+    @property
+    def _llm_type(self) -> str:
+        return "failover_chat_model"
+
+
+
+def get_default_llm() -> BaseChatModel:
+    """Initialize the configured LLM using environment variables based on LLM_PROVIDER with failover support."""
+    load_dotenv()
+    raw_provider = os.getenv("LLM_PROVIDER", "openai").strip()
+    provider = raw_provider.lower()
+
+    if provider == "gemini":
+        gemini_keys = []
+        for key_name in ["GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"]:
+            val = os.getenv(key_name)
+            if val and val != "your_gemini_api_key_here":
+                gemini_keys.append(val)
+        
+        # Fallback to GEMINI_API_KEY if none of the numbered keys exist
+        if not gemini_keys:
+            val = os.getenv("GEMINI_API_KEY")
+            if val and val != "your_gemini_api_key_here":
+                gemini_keys.append(val)
+
+        model_name = os.getenv("LLM_MODEL") or os.getenv("GEMINI_MODEL_NAME") or "gemini-3.6-flash"
+        if "gemini-2.0" in model_name:
+            model_name = "gemini-3.6-flash"
+
+        candidates = []
+        for k in gemini_keys:
+            candidates.append(
+                GeminiChatOpenAI(
+                    model=model_name,
+                    api_key=k,
+                    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                    temperature=0,
+                )
+            )
+
+        # OpenRouter fallback if configured
+        openrouter_key = os.getenv("OPENROUTER_API_KEY")
+        if openrouter_key and openrouter_key != "your_openrouter_api_key_here":
+            openrouter_model = os.getenv("OPENROUTER_MODEL") or os.getenv("LLM_MODEL") or "openai/gpt-4o-mini"
+            extra_headers = {}
+            site_url = os.getenv("OPENROUTER_SITE_URL")
+            app_name = os.getenv("OPENROUTER_APP_NAME")
+            if site_url:
+                extra_headers["HTTP-Referer"] = site_url
+            if app_name:
+                extra_headers["X-Title"] = app_name
+
+            candidates.append(
+                ChatOpenAI(
+                    model=openrouter_model,
+                    api_key=openrouter_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    default_headers=extra_headers if extra_headers else None,
+                    temperature=0,
+                )
+            )
+
+        if not candidates:
+            raise ValueError("GEMINI_API_KEY (or GEMINI_API_KEY_1) is required when LLM_PROVIDER=gemini")
+
+        if len(candidates) == 1:
+            return candidates[0]
+        return FailoverChatModel(candidates=candidates)
+
+    elif provider == "openrouter":
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key or api_key == "your_openrouter_api_key_here":
+            raise ValueError("OPENROUTER_API_KEY is required when LLM_PROVIDER=openrouter")
+        model_name = os.getenv("LLM_MODEL") or os.getenv("OPENROUTER_MODEL_NAME") or os.getenv("OPENROUTER_MODEL") or "openai/gpt-4o-mini"
+
+        extra_headers = {}
+        site_url = os.getenv("OPENROUTER_SITE_URL")
+        app_name = os.getenv("OPENROUTER_APP_NAME")
+        if site_url:
+            extra_headers["HTTP-Referer"] = site_url
+        if app_name:
+            extra_headers["X-Title"] = app_name
+
+        return ChatOpenAI(
+            model=model_name,
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers=extra_headers if extra_headers else None,
+            temperature=0,
         )
 
-    return ChatOpenAI(model=model_name, temperature=0)
+    elif provider == "openai":
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key or api_key == "your_openai_api_key_here":
+            raise ValueError(
+                "OPENAI_API_KEY is required when LLM_PROVIDER=openai. "
+                "OPENAI_API_KEY environment variable is not configured."
+            )
+        model_name = os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL_NAME") or "gpt-4o-mini"
+        return ChatOpenAI(model=model_name, api_key=api_key, temperature=0)
+
+    else:
+        raise ValueError(f"Unsupported LLM provider: {raw_provider}")
+
+
 
 
 def sync_plan_from_messages(state: AgentState) -> AgentState:
