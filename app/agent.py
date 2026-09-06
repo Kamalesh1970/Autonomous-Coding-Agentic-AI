@@ -14,6 +14,7 @@ from langchain_core.messages import (
 )
 from langchain_core.language_models import BaseChatModel
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode
 
@@ -226,10 +227,9 @@ def get_default_llm() -> BaseChatModel:
         candidates = []
         for k in gemini_keys:
             candidates.append(
-                GeminiChatOpenAI(
+                ChatGoogleGenerativeAI(
                     model=model_name,
-                    api_key=k,
-                    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+                    google_api_key=k,
                     temperature=0,
                 )
             )
@@ -496,7 +496,20 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
         else:
             input_messages.extend(messages)
 
+        import json
+        print("=== MESSAGE DUMP BEFORE FAILING CALL ===")
+        for i, m in enumerate(input_messages):
+            print(f"--- message {i}: {type(m).__name__} ---")
+            print("content:", repr(getattr(m, "content", None))[:200])
+            print("tool_calls:", getattr(m, "tool_calls", None))
+            print("additional_kwargs:", getattr(m, "additional_kwargs", None))
+            print("response_metadata:", getattr(m, "response_metadata", None))
+        print("=== END DUMP ===")
+
         response = llm_with_tools.invoke(input_messages)
+        if isinstance(response, AIMessage):
+            sig_produced = getattr(response, "additional_kwargs", {}).get("__gemini_function_call_thought_signatures__")
+            print(f"[PRODUCED AIMessage] additional_kwargs thought signatures: {sig_produced}")
 
         res_dict = {"messages": [response]}
         if state.get("plan"):

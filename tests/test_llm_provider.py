@@ -21,7 +21,8 @@ def test_gemini_36_flash_default_model(monkeypatch):
         target = llm.candidates[0]
     else:
         target = llm
-    assert target.model_name == "gemini-3.6-flash"
+    model_val = getattr(target, "model", getattr(target, "model_name", None))
+    assert model_val == "gemini-3.6-flash"
 
 
 def test_one_gemini_key_succeeds(monkeypatch):
@@ -34,8 +35,10 @@ def test_one_gemini_key_succeeds(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
 
     llm = get_default_llm()
-    assert isinstance(llm, ChatOpenAI)
-    assert llm.openai_api_key.get_secret_value() == "test-gemini-key-1"
+    key_val = getattr(llm, "google_api_key", getattr(llm, "openai_api_key", None))
+    if hasattr(key_val, "get_secret_value"):
+        key_val = key_val.get_secret_value()
+    assert key_val == "test-gemini-key-1"
 
 
 def test_key_1_429_fails_over_to_key_2(monkeypatch):
@@ -105,8 +108,14 @@ def test_missing_key_2_is_skipped(monkeypatch):
     llm = get_default_llm()
     assert isinstance(llm, FailoverChatModel)
     assert len(llm.candidates) == 2
-    assert llm.candidates[0].openai_api_key.get_secret_value() == "key-1"
-    assert llm.candidates[1].openai_api_key.get_secret_value() == "key-3"
+    k0 = getattr(llm.candidates[0], "google_api_key", getattr(llm.candidates[0], "openai_api_key", None))
+    if hasattr(k0, "get_secret_value"):
+        k0 = k0.get_secret_value()
+    k1 = getattr(llm.candidates[1], "google_api_key", getattr(llm.candidates[1], "openai_api_key", None))
+    if hasattr(k1, "get_secret_value"):
+        k1 = k1.get_secret_value()
+    assert k0 == "key-1"
+    assert k1 == "key-3"
 
 
 def test_non_retryable_404_does_not_rotate():
