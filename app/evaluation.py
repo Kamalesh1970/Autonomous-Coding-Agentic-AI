@@ -34,7 +34,7 @@ SENSITIVE_KEY_PATTERNS = [
 SENSITIVE_VALUE_PATTERNS = [
     r"sk-[a-zA-Z0-9_-]{5,}",
     r"ghp_[a-zA-Z0-9_-]{5,}",
-    r"-----BEGIN PRIVATE KEY-----[^-----]*-----END PRIVATE KEY-----",
+    r"-----BEGIN PRIVATE KEY-----[^\-]*-----END PRIVATE KEY-----",
     r"bearer\s+[a-zA-Z0-9_.\-]+",
 ]
 
@@ -170,7 +170,15 @@ def generate_evaluation_report(
     approval_req = bool(state.get("approval_required", False))
     approval_st = state.get("approval_status", "not_required")
 
-    if approval_req and approval_st == "pending":
+    # --- Plan approval gate: plan pending approval → ESCALATED (Phase 15+) ---
+    plan_approval_req = bool(state.get("plan_approval_required", False))
+    plan_approval_st = state.get("plan_approval_status", "not_required")
+
+    if plan_approval_req and plan_approval_st == "pending":
+        task_success = False
+        final_status = "escalated"
+        final_outcome = "ESCALATED"
+    elif approval_req and approval_st == "pending":
         task_success = False
         final_status = "escalated"
         final_outcome = "ESCALATED"

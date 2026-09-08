@@ -329,6 +329,10 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
     commit_created = bool(state.get("commit_created", False))
     push_requested = bool(state.get("push_requested", False))
     pr_requested = bool(state.get("pr_requested", False))
+    # Plan approval gate fields (Phase 15+)
+    plan_approval_required = bool(state.get("plan_approval_required", False))
+    plan_approval_status = state.get("plan_approval_status", "not_required")
+    plan_content = state.get("plan_content")
 
     for msg in messages:
         if isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
@@ -446,6 +450,10 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
     updated_state["commit_created"] = commit_created
     updated_state["push_requested"] = push_requested
     updated_state["pr_requested"] = pr_requested
+    # Carry plan approval gate fields
+    updated_state["plan_approval_required"] = plan_approval_required
+    updated_state["plan_approval_status"] = plan_approval_status
+    updated_state["plan_content"] = plan_content
 
     if task_id:
         updated_state["task_id"] = task_id
@@ -528,6 +536,12 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
             res_dict["task_id"] = state["task_id"]
         if state.get("status"):
             res_dict["status"] = state["status"]
+        if state.get("plan_approval_required") is not None:
+            res_dict["plan_approval_required"] = state["plan_approval_required"]
+        if state.get("plan_approval_status") is not None:
+            res_dict["plan_approval_status"] = state["plan_approval_status"]
+        if state.get("plan_content") is not None:
+            res_dict["plan_content"] = state["plan_content"]
 
         if not state.get("messages") and user_goal:
             res_dict["messages"] = [HumanMessage(content=user_goal), response]
@@ -557,6 +571,22 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
     workflow.add_edge("tools", "reason")
 
     return workflow.compile()
+
+
+def _format_plan_for_approval(plan: dict) -> str:
+    """Formats an ExecutionPlan dict as a human-readable approval request block."""
+    lines = [
+        "=== Plan Approval Request ===",
+        f"Goal: {plan.get('goal', '')}",
+        f"Tasks ({len(plan.get('tasks', []))}):",
+    ]
+    for t in plan.get("tasks", []):
+        deps = ", ".join(t.get("dependencies", [])) or "none"
+        lines.append(f"  [{t.get('id', '?')}] {t.get('title', '')} (deps: {deps})")
+        if t.get("description"):
+            lines.append(f"      {t.get('description', '')}")
+    lines.append("Status: pending")
+    return "\n".join(lines)
 
 
 def run_agent(
@@ -646,16 +676,52 @@ def run_agent(
     app_req = bool(synced_state.get("approval_required", False))
     app_st = synced_state.get("approval_status", "not_required")
 
-    if app_req and app_st == "pending":
-        synced_state["status"] = "paused"
-    elif ver_res and ver_res.get("status") == "passed":
-        synced_state["status"] = "completed"
-    elif ver_res and ver_res.get("status") == "failed":
-        synced_state["status"] = "failed"
-    elif val_res and val_res.get("status") in ("failed", "error") and synced_state.get("retry_count", 0) >= synced_state.get("max_retries", 3):
-        synced_state["status"] = "failed"
+    # --- Plan approval gate (Phase 15+) ---
+    require_plan_approval = os.getenv("REQUIRE_PLAN_APPROVAL", "false").strip().lower() in ("true", "1", "yes")
+    if require_plan_approval:
+        plan = synced_state.get("plan")
+        plan_app_req = bool(synced_state.get("plan_approval_required", False))
+        plan_app_st = synced_state.get("plan_approval_status", "not_required")
+        modified_files = synced_state.get("modified_files") or []
+
+        # Trigger only when: plan exists, no files have been edited yet, approval not already decided
+        if (
+            plan
+            and not modified_files
+            and plan_app_st not in ("approved", "rejected")
+            and not plan_app_req
+        ):
+            plan_text = _format_plan_for_approval(plan)
+            synced_state["plan_approval_required"] = True
+            synced_state["plan_approval_status"] = "pending"
+            synced_state["plan_content"] = plan_text
+            plan_app_req = True
+            plan_app_st = "pending"
+
+        if plan_app_req and plan_app_st == "pending":
+            synced_state["status"] = "paused"
+        elif app_req and app_st == "pending":  # existing Git-delivery gate
+            synced_state["status"] = "paused"
+        elif ver_res and ver_res.get("status") == "passed":
+            synced_state["status"] = "completed"
+        elif ver_res and ver_res.get("status") == "failed":
+            synced_state["status"] = "failed"
+        elif val_res and val_res.get("status") in ("failed", "error") and synced_state.get("retry_count", 0) >= synced_state.get("max_retries", 3):
+            synced_state["status"] = "failed"
+        else:
+            synced_state["status"] = "completed"
     else:
-        synced_state["status"] = "completed"
+        # Default behavior: plan approval disabled
+        if app_req and app_st == "pending":
+            synced_state["status"] = "paused"
+        elif ver_res and ver_res.get("status") == "passed":
+            synced_state["status"] = "completed"
+        elif ver_res and ver_res.get("status") == "failed":
+            synced_state["status"] = "failed"
+        elif val_res and val_res.get("status") in ("failed", "error") and synced_state.get("retry_count", 0) >= synced_state.get("max_retries", 3):
+            synced_state["status"] = "failed"
+        else:
+            synced_state["status"] = "completed"
 
     t_end = time.time()
     current_trace = synced_state.get("execution_trace") or []
@@ -707,11 +773,30 @@ def approve_task(
     llm: BaseChatModel | None = None,
     storage_dir: str = ".agent_memory",
 ) -> dict:
-    """Processes a human approval decision for a persistent task and resumes if approved."""
+    """Processes a human approval decision for a persistent task and resumes if approved.
+
+    Handles both Git-delivery approval (Phase 10) and plan approval (Phase 15+,
+    REQUIRE_PLAN_APPROVAL=true).  When a plan is pending approval, approving clears the
+    plan_approval gate so execution proceeds to file modification; rejecting keeps
+    plan_approval_status='rejected' so no file edits occur.
+    """
     from app.tools import process_human_approval
 
     initial_state = load_state(task_id, storage_dir=storage_dir)
     updated_state = process_human_approval(initial_state, decision=decision, notes=notes)
+
+    # Also propagate decision to plan-approval gate if it was the pending checkpoint
+    if bool(initial_state.get("plan_approval_required", False)) and initial_state.get("plan_approval_status") == "pending":
+        decision_norm = str(decision or "").strip().lower()
+        if decision_norm in ("approve", "approved", "yes", "pass"):
+            updated_state["plan_approval_required"] = False
+            updated_state["plan_approval_status"] = "approved"
+        else:
+            updated_state["plan_approval_required"] = False
+            updated_state["plan_approval_status"] = "rejected"
+            updated_state["status"] = "paused"
+            save_state(task_id, updated_state, status="paused", storage_dir=storage_dir)
+            return updated_state
 
     if updated_state.get("approval_status") == "rejected":
         updated_state["status"] = "paused"

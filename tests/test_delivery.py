@@ -448,3 +448,179 @@ def test_end_to_end_delivery_agent_workflow(tmp_path: Path):
     # Verify commit exists in actual git log
     log_res = subprocess.run(["git", "log", "-n", "1", "--oneline"], cwd=tmp_path, capture_output=True, text=True, check=True)
     assert "Fix sub function in lib.py" in log_res.stdout
+
+
+# -----------------------------------------------------------------------------
+# 8. Plan Approval Gate Tests (Phase 15+, REQUIRE_PLAN_APPROVAL)
+# -----------------------------------------------------------------------------
+
+def test_plan_approval_disabled_default(tmp_path: Path, monkeypatch):
+    """Regression: with REQUIRE_PLAN_APPROVAL unset (default=false), agent runs
+    normally — no plan_approval_required flag is raised and outcome is not ESCALATED."""
+    monkeypatch.delenv("REQUIRE_PLAN_APPROVAL", raising=False)
+    init_git_repo(tmp_path)
+    (tmp_path / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+
+    mock_responses = [
+        AIMessage(
+            content="Creating plan.",
+            tool_calls=[{
+                "name": "create_plan",
+                "args": {
+                    "tasks": [{"id": "t1", "title": "Fix calc", "dependencies": []}]
+                },
+                "id": "pa1",
+            }],
+        ),
+        AIMessage(
+            content="Goal verified.",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {
+                    "status": "passed",
+                    "summary": "calc.py is correct",
+                    "evidence": ["add returns a+b"],
+                },
+                "id": "pa2",
+            }],
+        ),
+        AIMessage(content="Done."),
+    ]
+    mock_llm = MockLLM(responses=mock_responses)
+
+    state = run_agent(
+        goal="Verify calc.py",
+        workspace_root=str(tmp_path),
+        llm=mock_llm,
+        task_id="plan_approval_disabled_test",
+        storage_dir=str(tmp_path / "mem"),
+    )
+
+    # Plan approval gate must NOT be triggered when env var is absent/false
+    assert state.get("plan_approval_required") in (False, None)
+    assert state.get("plan_approval_status") in ("not_required", None)
+    # Final outcome should NOT be ESCALATED due to plan approval
+    report = state.get("evaluation_report") or {}
+    assert report.get("final_outcome") != "ESCALATED" or state.get("approval_required") is True
+
+
+def test_plan_approval_enabled_plan_approved(tmp_path: Path, monkeypatch):
+    """With REQUIRE_PLAN_APPROVAL=true, approving the plan clears the gate so
+    plan_approval_status becomes 'approved' and execution can proceed."""
+    monkeypatch.setenv("REQUIRE_PLAN_APPROVAL", "true")
+    init_git_repo(tmp_path)
+    (tmp_path / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+
+    task_id = "plan_approval_enabled_approved_test"
+    storage_dir = tmp_path / "mem"
+
+    # --- Step 1: agent generates plan → pauses for approval ---
+    step1_responses = [
+        AIMessage(
+            content="Creating plan.",
+            tool_calls=[{
+                "name": "create_plan",
+                "args": {
+                    "tasks": [{"id": "t1", "title": "Fix calc", "dependencies": []}]
+                },
+                "id": "pa3",
+            }],
+        ),
+        AIMessage(content="Plan ready, awaiting human approval."),
+    ]
+    mock_llm_step1 = MockLLM(responses=step1_responses)
+
+    state1 = run_agent(
+        goal="Verify calc.py",
+        workspace_root=str(tmp_path),
+        llm=mock_llm_step1,
+        task_id=task_id,
+        storage_dir=str(storage_dir),
+    )
+
+    # Gate should be raised: plan exists, no files edited, status pending
+    assert state1.get("plan_approval_required") is True
+    assert state1.get("plan_approval_status") == "pending"
+    assert state1.get("plan_content") is not None
+    assert "Plan Approval Request" in (state1.get("plan_content") or "")
+
+    # --- Step 2: human approves the plan → gate cleared ---
+    step2_responses = [
+        AIMessage(
+            content="Proceeding with verified plan.",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {
+                    "status": "passed",
+                    "summary": "calc verified",
+                    "evidence": ["add returns a+b"],
+                },
+                "id": "pa4",
+            }],
+        ),
+        AIMessage(content="Task complete."),
+    ]
+    mock_llm_step2 = MockLLM(responses=step2_responses)
+
+    state2 = approve_task(
+        task_id=task_id,
+        decision="approved",
+        notes="Plan looks good.",
+        workspace_root=str(tmp_path),
+        storage_dir=str(storage_dir),
+        llm=mock_llm_step2,
+    )
+
+    assert state2.get("plan_approval_status") == "approved"
+    assert state2.get("plan_approval_required") is False
+
+
+def test_plan_approval_enabled_plan_pending_escalated(tmp_path: Path, monkeypatch):
+    """With REQUIRE_PLAN_APPROVAL=true, a plan that has not yet been approved must
+    produce final_outcome=ESCALATED and must NOT have modified any files."""
+    monkeypatch.setenv("REQUIRE_PLAN_APPROVAL", "true")
+    init_git_repo(tmp_path)
+    (tmp_path / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+
+    task_id = "plan_approval_pending_escalated_test"
+    storage_dir = tmp_path / "mem"
+
+    # Agent generates plan but does NOT approve it
+    responses = [
+        AIMessage(
+            content="Creating plan.",
+            tool_calls=[{
+                "name": "create_plan",
+                "args": {
+                    "tasks": [{"id": "t1", "title": "Fix calc", "dependencies": []}]
+                },
+                "id": "pa5",
+            }],
+        ),
+        AIMessage(content="Waiting for approval."),
+    ]
+    mock_llm = MockLLM(responses=responses)
+
+    state = run_agent(
+        goal="Fix calc.py",
+        workspace_root=str(tmp_path),
+        llm=mock_llm,
+        task_id=task_id,
+        storage_dir=str(storage_dir),
+    )
+
+    # Plan approval gate must be pending
+    assert state.get("plan_approval_required") is True
+    assert state.get("plan_approval_status") == "pending"
+
+    # No files should have been modified (gate stopped execution before edits)
+    modified_files = state.get("modified_files") or []
+    assert modified_files == [], f"Expected no file modifications, got: {modified_files}"
+
+    # Evaluation report must classify this as ESCALATED
+    report = state.get("evaluation_report") or {}
+    assert report.get("final_outcome") == "ESCALATED", (
+        f"Expected ESCALATED, got {report.get('final_outcome')}"
+    )
+    assert report.get("task_success") is False
+

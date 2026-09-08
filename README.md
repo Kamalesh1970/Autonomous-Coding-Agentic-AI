@@ -19,6 +19,8 @@ Advanced Context Retrieval (Lexical / Semantic / Hybrid)
    ↓
 Dynamic Architectural Planning & Task Decomposition
    ↓
+[Optional] Plan Approval Gate  ←─ REQUIRE_PLAN_APPROVAL=true pauses here
+   ↓
 Tool Selection & Safe File Modification
    ↓
 Automated Testing & Observation
@@ -44,7 +46,7 @@ Every task execution produces a unambiguous, explicit final outcome status:
 | :--- | :--- | :--- |
 | `SUCCESS` | Task completed & goal satisfied. | Original goal verified (`verify_goal` status is `passed`) or tests passed and goal requirements satisfied. |
 | `FAILED` | Task failed to satisfy goal. | Goal verification failed, tests failed after exhausting retry attempts (`retry_count >= max_retries`), or execution error occurred. |
-| `ESCALATED` | Task requires human approval/intervention. | External delivery action pending human approval (`approval_required=True` with `approval_status="pending"`) or review status is `blocked`. |
+| `ESCALATED` | Task requires human approval/intervention. | External delivery action pending human approval (`approval_required=True` with `approval_status="pending"`), plan pending pre-execution approval (`plan_approval_required=True` with `plan_approval_status="pending"`), or review status is `blocked`. |
 
 ---
 
@@ -129,3 +131,66 @@ pytest -v tests/test_end_to_end.py
 pytest -v
 ```
 
+---
+
+## 🔒 Pre-Execution Plan Approval Gate (`REQUIRE_PLAN_APPROVAL`)
+
+Inspired by the [Open SWE](https://github.com/langchain-ai/open-swe) three-agent architecture, the agent supports an optional **human checkpoint on the plan itself** — before any file modification begins. This mirrors how the existing Phase 10 Git-delivery approval gate works.
+
+### Environment Variable
+
+| Variable | Default | Description |
+| :--- | :--- | :--- |
+| `REQUIRE_PLAN_APPROVAL` | `false` | Set to `true`, `1`, or `yes` to enable the pre-execution plan approval gate. |
+
+### Behavior
+
+| Mode | Behavior |
+| :--- | :--- |
+| `REQUIRE_PLAN_APPROVAL=false` (default) | Unchanged from Phase 15 flow — agent plans and executes autonomously. |
+| `REQUIRE_PLAN_APPROVAL=true` | After the plan is generated and **before** any `write_file` / `replace_in_file` call executes, the agent **pauses**, sets `plan_approval_required=True` / `plan_approval_status="pending"`, and exposes the formatted plan in `state["plan_content"]`. No file edits occur until the plan is approved. Final outcome is `ESCALATED`. |
+
+When plan approval is pending:
+- `state["plan_approval_required"]` → `True`
+- `state["plan_approval_status"]` → `"pending"`
+- `state["plan_content"]` → Human-readable plan block (goal + task list)
+- `state["modified_files"]` → `[]` (no edits made yet)
+- `evaluation_report["final_outcome"]` → `"ESCALATED"`
+
+### Approving / Rejecting a Plan
+
+Use the same `approve_task()` API already used for Git-delivery approval:
+
+```python
+from app.agent import approve_task
+
+# Approve — execution resumes from the approved plan
+result = approve_task(
+    task_id="task_abc123",
+    decision="approved",          # or "approve", "yes", "pass"
+    notes="Plan looks correct.",
+    workspace_root="/path/to/repo",
+    storage_dir=".agent_memory",
+    llm=my_llm,
+)
+
+# Reject — gate remains closed, no file edits occur
+result = approve_task(
+    task_id="task_abc123",
+    decision="rejected",
+    notes="Plan scope is too broad — needs revision.",
+    workspace_root="/path/to/repo",
+    storage_dir=".agent_memory",
+)
+```
+
+### `.env` Example
+
+```bash
+# Enable pre-execution plan approval gate
+REQUIRE_PLAN_APPROVAL=true
+```
+
+> **Note:** Disabling `REQUIRE_PLAN_APPROVAL` (or omitting it entirely) restores the default Phase 15 autonomous behavior — no tests are affected.
+
+---

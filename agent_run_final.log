@@ -1,0 +1,389 @@
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+Goal: Fix all failing tests
+Workspace Root: /home/kamalesh/Autonomous Coding Agentic AI/my-repo
+--------------------------------------------------
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+=== END DUMP ===
+[PRODUCED AIMessage] additional_kwargs thought signatures: {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 2: AIMessage ---
+content: []
+tool_calls: [{'name': 'run_tests', 'args': {}, 'id': 'call_301829', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'run_tests', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 3: ToolMessage ---
+content: '=== Test Execution Result ===\nStatus: passed\nExit Code: 0\nSummary: All tests passed successfully.\nOutput:\n----------------------------------------\n============================= test session sta
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+=== END DUMP ===
+Provider attempt 1 failed with retryable error (GoogleRateLimitError: Error calling model 'gemini-3.6-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash\nPlease retry in 6.770316066s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.6-flash', 'location': 'global'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '6s'}]}}); trying next configured option.
+[PRODUCED AIMessage] additional_kwargs thought signatures: {'call_209197': 'Ev8CCvwCARFNMg/2D3gwpQiCHfep0LcQqsCVhBJpt/iJpDGQN/jWBf2AkZjW6BJVzYI/Muu1b1V3bElmxDkB1WTqVMCDpDR4VYJ4apineY0CATWiuRtERVHjpRlpXgaykc7Tq/gDCZmw+RTN8c/v+ba1gInjlaOrt5q8y/jXhRgsLEby79ddGArSXg824FHB+rXvMUtG6j2KYLaoH3inn2Q2LVay45Qi1daX9IEsbqP0iexMbinA13UbZtjphkmPFQTfH59oELCprlw0/1e7Q1PIcTuGdCZD+X75GhIb6t8oUL2f0VrF+G9Fih1licv6AXpH/bHQZfwRvjxO0NkE8Emh4H8IfmEj3m+SGnwuOs/2HvYHReJ/upv4FM8BqxVLSL44EQmozFrfJdhoZJiBpuEmrzlUydz3SnfFtvqLciJY/d7Rxbued2g/7bHhvsW5KRT9m6VyTzeRHn+0gqoyOsRNSXz7ukXei/+AaKeYC8rrOrT9saIeEzN/qCVx4m7qpQU='}
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 2: AIMessage ---
+content: []
+tool_calls: [{'name': 'run_tests', 'args': {}, 'id': 'call_301829', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'run_tests', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 3: ToolMessage ---
+content: '=== Test Execution Result ===\nStatus: passed\nExit Code: 0\nSummary: All tests passed successfully.\nOutput:\n----------------------------------------\n============================= test session sta
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 4: AIMessage ---
+content: []
+tool_calls: [{'name': 'list_files', 'args': {}, 'id': 'call_209197', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'list_files', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_209197': 'Ev8CCvwCARFNMg/2D3gwpQiCHfep0LcQqsCVhBJpt/iJpDGQN/jWBf2AkZjW6BJVzYI/Muu1b1V3bElmxDkB1WTqVMCDpDR4VYJ4apineY0CATWiuRtERVHjpRlpXgaykc7Tq/gDCZmw+RTN8c/v+ba1gInjlaOrt5q8y/jXhRgsLEby79ddGArSXg824FHB+rXvMUtG6j2KYLaoH3inn2Q2LVay45Qi1daX9IEsbqP0iexMbinA13UbZtjphkmPFQTfH59oELCprlw0/1e7Q1PIcTuGdCZD+X75GhIb6t8oUL2f0VrF+G9Fih1licv6AXpH/bHQZfwRvjxO0NkE8Emh4H8IfmEj3m+SGnwuOs/2HvYHReJ/upv4FM8BqxVLSL44EQmozFrfJdhoZJiBpuEmrzlUydz3SnfFtvqLciJY/d7Rxbued2g/7bHhvsW5KRT9m6VyTzeRHn+0gqoyOsRNSXz7ukXei/+AaKeYC8rrOrT9saIeEzN/qCVx4m7qpQU='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 5: ToolMessage ---
+content: 'calculator.py\nstring_utils.py\ntest_calculator.py\ntest_string_utils.py'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+=== END DUMP ===
+Provider attempt 1 failed with retryable error (GoogleRateLimitError: Error calling model 'gemini-3.6-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash\nPlease retry in 50.158599496s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'model': 'gemini-3.6-flash', 'location': 'global'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '50s'}]}}); trying next configured option.
+[PRODUCED AIMessage] additional_kwargs thought signatures: {'call_496789': 'EvsDCvgDARFNMg/sXCL4waJV+X+6QIuqAN7EH6TluFTCKjtRNygs3kXoSjW01dtQgONWH+dyXXabn8alJzk0mVxySrDyYyK1CR398y4HFT60pwznyLASeUTXBqhfQGpiAZUP/g7S/gON4dmivZnwGMMqwPs6b+D9QST7EpDkkIR0snyXo/X6spYHQxUq8NUpa6mAQmZnFnO8Die8d3R2X89pvs1PCXCCZZHNH6oc8OOLMhRpEerQJqxMAiCvHl6+QOShjPDkYqi0TqXhLUyRZkD27Q2MZ6ShnVrbTQGPzfE/N2WuqD7BlwQsXQqsujjSDOFA0F+BeiXkG8toz5QAXLNaT4DTEnfTda9QZSnmyLf3dnVOk+0Kvo+WCBSUNgIt7sMlIX8JrPw6zp64cOu9Zuldc0toQHVcsPS6XdVXp9yL9LobC6qPScHwYg6N6nqLi2Ew5vAVa8iywXG4i0e+6hQkGyx7J79l2rBeYIcWBh5h3PsD1bPDXAZnG184S/ae0l3oaNpyGui3WJPxDwmHx0R3LkHxLIg7VL6xILCt6ptTJcV6xrfEdB2UxdfUTQtyneTwEOSMffWADVjSxVrM4TI9a1CmNA/7uis5bKa70f2F1njFg+B9/LI1mKmlrBWMDlPLUfte4CAteEsf3x5djEIfE25ABxF+r2TGKMeG'}/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 2: AIMessage ---
+content: []
+tool_calls: [{'name': 'run_tests', 'args': {}, 'id': 'call_301829', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'run_tests', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 3: ToolMessage ---
+content: '=== Test Execution Result ===\nStatus: passed\nExit Code: 0\nSummary: All tests passed successfully.\nOutput:\n----------------------------------------\n============================= test session sta
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 4: AIMessage ---
+content: []
+tool_calls: [{'name': 'list_files', 'args': {}, 'id': 'call_209197', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'list_files', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_209197': 'Ev8CCvwCARFNMg/2D3gwpQiCHfep0LcQqsCVhBJpt/iJpDGQN/jWBf2AkZjW6BJVzYI/Muu1b1V3bElmxDkB1WTqVMCDpDR4VYJ4apineY0CATWiuRtERVHjpRlpXgaykc7Tq/gDCZmw+RTN8c/v+ba1gInjlaOrt5q8y/jXhRgsLEby79ddGArSXg824FHB+rXvMUtG6j2KYLaoH3inn2Q2LVay45Qi1daX9IEsbqP0iexMbinA13UbZtjphkmPFQTfH59oELCprlw0/1e7Q1PIcTuGdCZD+X75GhIb6t8oUL2f0VrF+G9Fih1licv6AXpH/bHQZfwRvjxO0NkE8Emh4H8IfmEj3m+SGnwuOs/2HvYHReJ/upv4FM8BqxVLSL44EQmozFrfJdhoZJiBpuEmrzlUydz3SnfFtvqLciJY/d7Rxbued2g/7bHhvsW5KRT9m6VyTzeRHn+0gqoyOsRNSXz7ukXei/+AaKeYC8rrOrT9saIeEzN/qCVx4m7qpQU='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 5: ToolMessage ---
+content: 'calculator.py\nstring_utils.py\ntest_calculator.py\ntest_string_utils.py'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 6: AIMessage ---
+content: []
+tool_calls: [{'name': 'git_status', 'args': {}, 'id': 'call_496789', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'git_status', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_496789': 'EvsDCvgDARFNMg/sXCL4waJV+X+6QIuqAN7EH6TluFTCKjtRNygs3kXoSjW01dtQgONWH+dyXXabn8alJzk0mVxySrDyYyK1CR398y4HFT60pwznyLASeUTXBqhfQGpiAZUP/g7S/gON4dmivZnwGMMqwPs6b+D9QST7EpDkkIR0snyXo/X6spYHQxUq8NUpa6mAQmZnFnO8Die8d3R2X89pvs1PCXCCZZHNH6oc8OOLMhRpEerQJqxMAiCvHl6+QOShjPDkYqi0TqXhLUyRZkD27Q2MZ6ShnVrbTQGPzfE/N2WuqD7BlwQsXQqsujjSDOFA0F+BeiXkG8toz5QAXLNaT4DTEnfTda9QZSnmyLf3dnVOk+0Kvo+WCBSUNgIt7sMlIX8JrPw6zp64cOu9Zuldc0toQHVcsPS6XdVXp9yL9LobC6qPScHwYg6N6nqLi2Ew5vAVa8iywXG4i0e+6hQkGyx7J79l2rBeYIcWBh5h3PsD1bPDXAZnG184S/ae0l3oaNpyGui3WJPxDwmHx0R3LkHxLIg7VL6xILCt6ptTJcV6xrfEdB2UxdfUTQtyneTwEOSMffWADVjSxVrM4TI9a1CmNA/7uis5bKa70f2F1njFg+B9/LI1mKmlrBWMDlPLUfte4CAteEsf3x5djEIfE25ABxF+r2TGKMeG'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 7: ToolMessage ---
+content: '## main...origin/main\n M ../.agent_memory/e2e_persistent_task_100.json\n M ../.agent_memory/task_e2e_delivery_101.json\n M ../.agent_memory/task_goal_1.json\n M ../.agent_memory/task_plan_1.json\n M
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+=== END DUMP ===
+Provider attempt 1 failed with retryable error (GoogleRateLimitError: Error calling model 'gemini-3.6-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash\nPlease retry in 41.108349553s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.6-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '41s'}]}}); trying next configured option.
+Provider attempt 2 failed with retryable error (GoogleAPIError: 503 UNAVAILABLE. {'error': {'code': 503, 'message': 'This model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again later.', 'status': 'UNAVAILABLE'}}); trying next configured option.
+[PRODUCED AIMessage] additional_kwargs thought signatures: {'call_469870': 'Ev8CCvwCARFNMg+MKhkjljM6dHYhHuoMCeuUZ0a61vHHk2DQvUPtLRtOpMn1BuuOzp+6wjpm3BcAQ3SGWpq75ep9Sd7w3v020wSWDA+iFdPis690cxjc4lYhTT6bATXtpeWxKUDnRuv27QORCLhdW4xMpi0UdN+anO1YeBm6ulYF7hol+VKvUYfy0lAqBoW7h4bAGFB7XuTcvXKf7TAYwNVDVbOib4T/t1Wny6qHKFVB9zMhTO0HysKK9IfAL+IsZe4tWInSq9CufXflZ2obiDrqxa64d6YNG/KIWw1VF7gf2oR7YXs9/dL1BXFY06zt+jcm0/k4TCDlEIrlSjn2hklK/0C6Azn/ymrnDa0hE8QCoY0zpimebsDpqJEEpzwY2r3fIYJYjV1wLiUydLOhuvYJ3iejazueec34Jc79bCnH22Cy5ipW96d+loH2/33JO8xx0n/kOVhiL8iF3yEI0muNhiSD9lQ+LzS2cvy94YFB29N0eiBdgLKchZbyMj0qTnM='}
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 2: AIMessage ---
+content: []
+tool_calls: [{'name': 'run_tests', 'args': {}, 'id': 'call_301829', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'run_tests', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 3: ToolMessage ---
+content: '=== Test Execution Result ===\nStatus: passed\nExit Code: 0\nSummary: All tests passed successfully.\nOutput:\n----------------------------------------\n============================= test session sta
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 4: AIMessage ---
+content: []
+tool_calls: [{'name': 'list_files', 'args': {}, 'id': 'call_209197', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'list_files', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_209197': 'Ev8CCvwCARFNMg/2D3gwpQiCHfep0LcQqsCVhBJpt/iJpDGQN/jWBf2AkZjW6BJVzYI/Muu1b1V3bElmxDkB1WTqVMCDpDR4VYJ4apineY0CATWiuRtERVHjpRlpXgaykc7Tq/gDCZmw+RTN8c/v+ba1gInjlaOrt5q8y/jXhRgsLEby79ddGArSXg824FHB+rXvMUtG6j2KYLaoH3inn2Q2LVay45Qi1daX9IEsbqP0iexMbinA13UbZtjphkmPFQTfH59oELCprlw0/1e7Q1PIcTuGdCZD+X75GhIb6t8oUL2f0VrF+G9Fih1licv6AXpH/bHQZfwRvjxO0NkE8Emh4H8IfmEj3m+SGnwuOs/2HvYHReJ/upv4FM8BqxVLSL44EQmozFrfJdhoZJiBpuEmrzlUydz3SnfFtvqLciJY/d7Rxbued2g/7bHhvsW5KRT9m6VyTzeRHn+0gqoyOsRNSXz7ukXei/+AaKeYC8rrOrT9saIeEzN/qCVx4m7qpQU='}}/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 5: ToolMessage ---
+content: 'calculator.py\nstring_utils.py\ntest_calculator.py\ntest_string_utils.py'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 6: AIMessage ---
+content: []
+tool_calls: [{'name': 'git_status', 'args': {}, 'id': 'call_496789', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'git_status', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_496789': 'EvsDCvgDARFNMg/sXCL4waJV+X+6QIuqAN7EH6TluFTCKjtRNygs3kXoSjW01dtQgONWH+dyXXabn8alJzk0mVxySrDyYyK1CR398y4HFT60pwznyLASeUTXBqhfQGpiAZUP/g7S/gON4dmivZnwGMMqwPs6b+D9QST7EpDkkIR0snyXo/X6spYHQxUq8NUpa6mAQmZnFnO8Die8d3R2X89pvs1PCXCCZZHNH6oc8OOLMhRpEerQJqxMAiCvHl6+QOShjPDkYqi0TqXhLUyRZkD27Q2MZ6ShnVrbTQGPzfE/N2WuqD7BlwQsXQqsujjSDOFA0F+BeiXkG8toz5QAXLNaT4DTEnfTda9QZSnmyLf3dnVOk+0Kvo+WCBSUNgIt7sMlIX8JrPw6zp64cOu9Zuldc0toQHVcsPS6XdVXp9yL9LobC6qPScHwYg6N6nqLi2Ew5vAVa8iywXG4i0e+6hQkGyx7J79l2rBeYIcWBh5h3PsD1bPDXAZnG184S/ae0l3oaNpyGui3WJPxDwmHx0R3LkHxLIg7VL6xILCt6ptTJcV6xrfEdB2UxdfUTQtyneTwEOSMffWADVjSxVrM4TI9a1CmNA/7uis5bKa70f2F1njFg+B9/LI1mKmlrBWMDlPLUfte4CAteEsf3x5djEIfE25ABxF+r2TGKMeG'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 7: ToolMessage ---
+content: '## main...origin/main\n M ../.agent_memory/e2e_persistent_task_100.json\n M ../.agent_memory/task_e2e_delivery_101.json\n M ../.agent_memory/task_goal_1.json\n M ../.agent_memory/task_plan_1.json\n M
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 8: AIMessage ---
+content: []
+tool_calls: [{'name': 'read_file', 'args': {'file_path': 'test_calculator.py'}, 'id': 'call_469870', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'read_file', 'arguments': '{"file_path": "test_calculator.py"}'}, '__gemini_function_call_thought_signatures__': {'call_469870': 'Ev8CCvwCARFNMg+MKhkjljM6dHYhHuoMCeuUZ0a61vHHk2DQvUPtLRtOpMn1BuuOzp+6wjpm3BcAQ3SGWpq75ep9Sd7w3v020wSWDA+iFdPis690cxjc4lYhTT6bATXtpeWxKUDnRuv27QORCLhdW4xMpi0UdN+anO1YeBm6ulYF7hol+VKvUYfy0lAqBoW7h4bAGFB7XuTcvXKf7TAYwNVDVbOib4T/t1Wny6qHKFVB9zMhTO0HysKK9IfAL+IsZe4tWInSq9CufXflZ2obiDrqxa64d6YNG/KIWw1VF7gf2oR7YXs9/dL1BXFY06zt+jcm0/k4TCDlEIrlSjn2hklK/0C6Azn/ymrnDa0hE8QCoY0zpimebsDpqJEEpzwY2r3fIYJYjV1wLiUydLOhuvYJ3iejazueec34Jc79bCnH22Cy5ipW96d+loH2/33JO8xx0n/kOVhiL8iF3yEI0muNhiSD9lQ+LzS2cvy94YFB29N0eiBdgLKchZbyMj0qTnM='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 9: ToolMessage ---
+content: 'from calculator import add, multiply\n\n\ndef test_add():\n    assert add(2, 3) == 5\n\n\ndef test_multiply():\n    assert multiply(4, 5) == 20\n'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+=== END DUMP ===
+Provider attempt 1 failed with retryable error (GoogleRateLimitError: Error calling model 'gemini-3.6-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash\nPlease retry in 29.315399264s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.6-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '29s'}]}}); trying next configured option.
+[PRODUCED AIMessage] additional_kwargs thought signatures: {'call_340182': 'EokBCoYBARFNMg+gxWPyyjtzyU5/at7ZsBdmsOpv4OQorixQK/plrqVt+gBQ817kB5BjksArrYchv0y1lvqwVtroAPl1/AZ1RSiMhNumBnW544haoyX1p5h09OVxHgue1MMUQCUTcfVQGL6bT2roN51yEnX+HoXMTfcdbip6N0/zaMnZWhQBtrpXB3M='}
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 2: AIMessage ---
+content: []
+tool_calls: [{'name': 'run_tests', 'args': {}, 'id': 'call_301829', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'run_tests', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 3: ToolMessage ---
+content: '=== Test Execution Result ===\nStatus: passed\nExit Code: 0\nSummary: All tests passed successfully.\nOutput:\n----------------------------------------\n============================= test session sta
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 4: AIMessage ---
+content: []
+tool_calls: [{'name': 'list_files', 'args': {}, 'id': 'call_209197', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'list_files', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_209197': 'Ev8CCvwCARFNMg/2D3gwpQiCHfep0LcQqsCVhBJpt/iJpDGQN/jWBf2AkZjW6BJVzYI/Muu1b1V3bElmxDkB1WTqVMCDpDR4VYJ4apineY0CATWiuRtERVHjpRlpXgaykc7Tq/gDCZmw+RTN8c/v+ba1gInjlaOrt5q8y/jXhRgsLEby79ddGArSXg824FHB+rXvMUtG6j2KYLaoH3inn2Q2LVay45Qi1daX9IEsbqP0iexMbinA13UbZtjphkmPFQTfH59oELCprlw0/1e7Q1PIcTuGdCZD+X75GhIb6t8oUL2f0VrF+G9Fih1licv6AXpH/bHQZfwRvjxO0NkE8Emh4H8IfmEj3m+SGnwuOs/2HvYHReJ/upv4FM8BqxVLSL44EQmozFrfJdhoZJiBpuEmrzlUydz3SnfFtvqLciJY/d7Rxbued2g/7bHhvsW5KRT9m6VyTzeRHn+0gqoyOsRNSXz7ukXei/+AaKeYC8rrOrT9saIeEzN/qCVx4m7qpQU='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 5: ToolMessage ---
+content: 'calculator.py\nstring_utils.py\ntest_calculator.py\ntest_string_utils.py'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 6: AIMessage ---
+content: []
+tool_calls: [{'name': 'git_status', 'args': {}, 'id': 'call_496789', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'git_status', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_496789': 'EvsDCvgDARFNMg/sXCL4waJV+X+6QIuqAN7EH6TluFTCKjtRNygs3kXoSjW01dtQgONWH+dyXXabn8alJzk0mVxySrDyYyK1CR398y4HFT60pwznyLASeUTXBqhfQGpiAZUP/g7S/gON4dmivZnwGMMqwPs6b+D9QST7EpDkkIR0snyXo/X6spYHQxUq8NUpa6mAQmZnFnO8Die8d3R2X89pvs1PCXCCZZHNH6oc8OOLMhRpEerQJqxMAiCvHl6+QOShjPDkYqi0TqXhLUyRZkD27Q2MZ6ShnVrbTQGPzfE/N2WuqD7BlwQsXQqsujjSDOFA0F+BeiXkG8toz5QAXLNaT4DTEnfTda9QZSnmyLf3dnVOk+0Kvo+WCBSUNgIt7sMlIX8JrPw6zp64cOu9Zuldc0toQHVcsPS6XdVXp9yL9LobC6qPScHwYg6N6nqLi2Ew5vAVa8iywXG4i0e+6hQkGyx7J79l2rBeYIcWBh5h3PsD1bPDXAZnG184S/ae0l3oaNpyGui3WJPxDwmHx0R3LkHxLIg7VL6xILCt6ptTJcV6xrfEdB2UxdfUTQtyneTwEOSMffWADVjSxVrM4TI9a1CmNA/7uis5bKa70f2F1njFg+B9/LI1mKmlrBWMDlPLUfte4CAteEsf3x5djEIfE25ABxF+r2TGKMeG'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 7: ToolMessage ---
+content: '## main...origin/main\n M ../.agent_memory/e2e_persistent_task_100.json\n M ../.agent_memory/task_e2e_delivery_101.json\n M ../.agent_memory/task_goal_1.json\n M ../.agent_memory/task_plan_1.json\n M/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 8: AIMessage ---
+content: []
+tool_calls: [{'name': 'read_file', 'args': {'file_path': 'test_calculator.py'}, 'id': 'call_469870', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'read_file', 'arguments': '{"file_path": "test_calculator.py"}'}, '__gemini_function_call_thought_signatures__': {'call_469870': 'Ev8CCvwCARFNMg+MKhkjljM6dHYhHuoMCeuUZ0a61vHHk2DQvUPtLRtOpMn1BuuOzp+6wjpm3BcAQ3SGWpq75ep9Sd7w3v020wSWDA+iFdPis690cxjc4lYhTT6bATXtpeWxKUDnRuv27QORCLhdW4xMpi0UdN+anO1YeBm6ulYF7hol+VKvUYfy0lAqBoW7h4bAGFB7XuTcvXKf7TAYwNVDVbOib4T/t1Wny6qHKFVB9zMhTO0HysKK9IfAL+IsZe4tWInSq9CufXflZ2obiDrqxa64d6YNG/KIWw1VF7gf2oR7YXs9/dL1BXFY06zt+jcm0/k4TCDlEIrlSjn2hklK/0C6Azn/ymrnDa0hE8QCoY0zpimebsDpqJEEpzwY2r3fIYJYjV1wLiUydLOhuvYJ3iejazueec34Jc79bCnH22Cy5ipW96d+loH2/33JO8xx0n/kOVhiL8iF3yEI0muNhiSD9lQ+LzS2cvy94YFB29N0eiBdgLKchZbyMj0qTnM='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 9: ToolMessage ---
+content: 'from calculator import add, multiply\n\n\ndef test_add():\n    assert add(2, 3) == 5\n\n\ndef test_multiply():\n    assert multiply(4, 5) == 20\n'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 10: AIMessage ---
+content: []
+tool_calls: [{'name': 'read_file', 'args': {'file_path': 'test_string_utils.py'}, 'id': 'call_340182', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'read_file', 'arguments': '{"file_path": "test_string_utils.py"}'}, '__gemini_function_call_thought_signatures__': {'call_340182': 'EokBCoYBARFNMg+gxWPyyjtzyU5/at7ZsBdmsOpv4OQorixQK/plrqVt+gBQ817kB5BjksArrYchv0y1lvqwVtroAPl1/AZ1RSiMhNumBnW544haoyX1p5h09OVxHgue1MMUQCUTcfVQGL6bT2roN51yEnX+HoXMTfcdbip6N0/zaMnZWhQBtrpXB3M='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 11: ToolMessage ---
+content: 'from string_utils import reverse_text, is_palindrome\n\n\ndef test_reverse_text():\n    assert reverse_text("hello") == "olleh"\n\n\ndef test_palindrome():\n    assert is_palindrome("Level") is True\
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+=== END DUMP ===
+Provider attempt 1 failed with retryable error (GoogleRateLimitError: Error calling model 'gemini-3.6-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash\nPlease retry in 27.018229088s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.6-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '27s'}]}}); trying next configured option.
+[PRODUCED AIMessage] additional_kwargs thought signatures: {'call_420619': 'EpkBCpYBARFNMg83Xr7Im46Db8PbirxGCFRTirA0hKWoCL/R+XXsddXrZUAMkxRWEU1UQsoPpUfLH7IQtOB82XDM7Ie8g3i7gaRedNNbvubZ4ODS8dNcuwTmEKzK7qxT6X0aPNgYIm0wi45XHRtM06KuYVJa7kPgeP8WE5foPWN/rBruUSvCqAsQZetu6mbMPU2FOe7n4KvArDAq'}
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 2: AIMessage ---
+content: []
+tool_calls: [{'name': 'run_tests', 'args': {}, 'id': 'call_301829', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'run_tests', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 3: ToolMessage ---
+content: '=== Test Execution Result ===\nStatus: passed\nExit Code: 0\nSummary: All tests passed successfully.\nOutput:\n----------------------------------------\n============================= test session sta
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 4: AIMessage ---
+content: []
+tool_calls: [{'name': 'list_files', 'args': {}, 'id': 'call_209197', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'list_files', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_209197': 'Ev8CCvwCARFNMg/2D3gwpQiCHfep0LcQqsCVhBJpt/iJpDGQN/jWBf2AkZjW6BJVzYI/Muu1b1V3bElmxDkB1WTqVMCDpDR4VYJ4apineY0CATWiuRtERVHjpRlpXgaykc7Tq/gDCZmw+RTN8c/v+ba1gInjlaOrt5q8y/jXhRgsLEby79ddGArSXg824FHB+rXvMUtG6j2KYLaoH3inn2Q2LVay45Qi1daX9IEsbqP0iexMbinA13UbZtjphkmPFQTfH59oELCprlw0/1e7Q1PIcTuGdCZD+X75GhIb6t8oUL2f0VrF+G9Fih1licv6AXpH/bHQZfwRvjxO0NkE8Emh4H8IfmEj3m+SGnwuOs/2HvYHReJ/upv4FM8BqxVLSL44EQmozFrfJdhoZJiBpuEmrzlUydz3SnfFtvqLciJY/d7Rxbued2g/7bHhvsW5KRT9m6VyTzeRHn+0gqoyOsRNSXz7ukXei/+AaKeYC8rrOrT9saIeEzN/qCVx4m7qpQU='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 5: ToolMessage ---
+content: 'calculator.py\nstring_utils.py\ntest_calculator.py\ntest_string_utils.py'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 6: AIMessage ---
+content: []
+tool_calls: [{'name': 'git_status', 'args': {}, 'id': 'call_496789', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'git_status', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_496789': 'EvsDCvgDARFNMg/sXCL4waJV+X+6QIuqAN7EH6TluFTCKjtRNygs3kXoSjW01dtQgONWH+dyXXabn8alJzk0mVxySrDyYyK1CR398y4HFT60pwznyLASeUTXBqhfQGpiAZUP/g7S/gON4dmivZnwGMMqwPs6b+D9QST7EpDkkIR0snyXo/X6spYHQxUq8NUpa6mAQmZnFnO8Die8d3R2X89pvs1PCXCCZZHNH6oc8OOLMhRpEerQJqxMAiCvHl6+QOShjPDkYqi0TqXhLUyRZkD27Q2MZ6ShnVrbTQGPzfE/N2WuqD7BlwQsXQqsujjSDOFA0F+BeiXkG8toz5QAXLNaT4DTEnfTda9QZSnmyLf3dnVOk+0Kvo+WCBSUNgIt7sMlIX8JrPw6zp64cOu9Zuldc0toQHVcsPS6XdVXp9yL9LobC6qPScHwYg6N6nqLi2Ew5vAVa8iywXG4i0e+6hQkGyx7J79l2rBeYIcWBh5h3PsD1bPDXAZnG184S/ae0l3oaNpyGui3WJPxDwmHx0R3LkHxLIg7VL6xILCt6ptTJcV6xrfEdB2UxdfUTQtyneTwEOSMffWADVjSxVrM4TI9a1CmNA/7uis5bKa70f2F1njFg+B9/LI1mKmlrBWMDlPLUfte4CAteEsf3x5djEIfE25ABxF+r2TGKMeG'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 7: ToolMessage ---
+content: '## main...origin/main\n M ../.agent_memory/e2e_persistent_task_100.json\n M ../.agent_memory/task_e2e_delivery_101.json\n M ../.agent_memory/task_goal_1.json\n M ../.agent_memory/task_plan_1.json\n M
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 8: AIMessage ---
+content: []
+tool_calls: [{'name': 'read_file', 'args': {'file_path': 'test_calculator.py'}, 'id': 'call_469870', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'read_file', 'arguments': '{"file_path": "test_calculator.py"}'}, '__gemini_function_call_thought_signatures__': {'call_469870': 'Ev8CCvwCARFNMg+MKhkjljM6dHYhHuoMCeuUZ0a61vHHk2DQvUPtLRtOpMn1BuuOzp+6wjpm3BcAQ3SGWpq75ep9Sd7w3v020wSWDA+iFdPis690cxjc4lYhTT6bATXtpeWxKUDnRuv27QORCLhdW4xMpi0UdN+anO1YeBm6ulYF7hol+VKvUYfy0lAqBoW7h4bAGFB7XuTcvXKf7TAYwNVDVbOib4T/t1Wny6qHKFVB9zMhTO0HysKK9IfAL+IsZe4tWInSq9CufXflZ2obiDrqxa64d6YNG/KIWw1VF7gf2oR7YXs9/dL1BXFY06zt+jcm0/k4TCDlEIrlSjn2hklK/0C6Azn/ymrnDa0hE8QCoY0zpimebsDpqJEEpzwY2r3fIYJYjV1wLiUydLOhuvYJ3iejazueec34Jc79bCnH22Cy5ipW96d+loH2/33JO8xx0n/kOVhiL8iF3yEI0muNhiSD9lQ+LzS2cvy94YFB29N0eiBdgLKchZbyMj0qTnM='}}/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 9: ToolMessage ---
+content: 'from calculator import add, multiply\n\n\ndef test_add():\n    assert add(2, 3) == 5\n\n\ndef test_multiply():\n    assert multiply(4, 5) == 20\n'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 10: AIMessage ---
+content: []
+tool_calls: [{'name': 'read_file', 'args': {'file_path': 'test_string_utils.py'}, 'id': 'call_340182', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'read_file', 'arguments': '{"file_path": "test_string_utils.py"}'}, '__gemini_function_call_thought_signatures__': {'call_340182': 'EokBCoYBARFNMg+gxWPyyjtzyU5/at7ZsBdmsOpv4OQorixQK/plrqVt+gBQ817kB5BjksArrYchv0y1lvqwVtroAPl1/AZ1RSiMhNumBnW544haoyX1p5h09OVxHgue1MMUQCUTcfVQGL6bT2roN51yEnX+HoXMTfcdbip6N0/zaMnZWhQBtrpXB3M='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 11: ToolMessage ---
+content: 'from string_utils import reverse_text, is_palindrome\n\n\ndef test_reverse_text():\n    assert reverse_text("hello") == "olleh"\n\n\ndef test_palindrome():\n    assert is_palindrome("Level") is True\
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 12: AIMessage ---
+content: []
+tool_calls: [{'name': 'read_file', 'args': {'file_path': 'calculator.py'}, 'id': 'call_420619', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'read_file', 'arguments': '{"file_path": "calculator.py"}'}, '__gemini_function_call_thought_signatures__': {'call_420619': 'EpkBCpYBARFNMg83Xr7Im46Db8PbirxGCFRTirA0hKWoCL/R+XXsddXrZUAMkxRWEU1UQsoPpUfLH7IQtOB82XDM7Ie8g3i7gaRedNNbvubZ4ODS8dNcuwTmEKzK7qxT6X0aPNgYIm0wi45XHRtM06KuYVJa7kPgeP8WE5foPWN/rBruUSvCqAsQZetu6mbMPU2FOe7n4KvArDAq'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 13: ToolMessage ---
+content: 'def add(a, b):\n    return a + b\n\n\ndef multiply(a, b):\n    return a * b\n'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+=== END DUMP ===
+Provider attempt 1 failed with retryable error (GoogleRateLimitError: Error calling model 'gemini-3.6-flash' (RESOURCE_EXHAUSTED): 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 20, model: gemini-3.6-flash\nPlease retry in 24.928068141s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-3.6-flash'}, 'quotaValue': '20'}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '24s'}]}}); trying next configured option.
+[PRODUCED AIMessage] additional_kwargs thought signatures: {'call_80686': 'EoQBCoEBARFNMg+lXbUYlwuItNv+AxCbjs+QnVjTJUxHawx4gFZm+RB86Nbzcpczyz6EFMYKhkvYXgGKygtkf2Q8DAK6aBwQJpr89x2pyLSp1ReVo876v0vmj3mrMg+nqOsUjSfuYm9jRrMheBliie/slNYRL0d2454YBAIII/bO/UdMe4Qt'}
+=== MESSAGE DUMP BEFORE FAILING CALL ===
+--- message 0: SystemMessage ---
+content: "You are an autonomous software engineering assistant equipped with repository inspection, context retrieval, dynamic planning, safe code editing, automated testing, goal verification, and safe Git/Gi
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 1: HumanMessage ---
+content: 'Fix all failing tests'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 2: AIMessage ---
+content: []
+tool_calls: [{'name': 'run_tests', 'args': {}, 'id': 'call_301829', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'run_tests', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_301829': 'EsMBCsABARFNMg8EelWx6BT57WWePL6SdGLitfiBVD3T/EAhC+5uCpfoLIy/MdJac7IvZV4B9wK1K7nHe0Y+xDoOeh9rMKd7rfFK22rxnK3fNeu4EsCgAnkt5Qgekx8/fPov+MTI8YIcNbWVW7L8oPQJ5NgAAyc8mLF35N2rglUDgu8WmodYPfzfCzBPztMfniil6kf7yi7DEsNCl0u7jCnRkNQEGocYKOq0QWWmwzZAOhrIqASs8yIqu//r+3jf2nzBv0cp'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 3: ToolMessage ---
+content: '=== Test Execution Result ===\nStatus: passed\nExit Code: 0\nSummary: All tests passed successfully.\nOutput:\n----------------------------------------\n============================= test session sta
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 4: AIMessage ---
+content: []
+tool_calls: [{'name': 'list_files', 'args': {}, 'id': 'call_209197', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'list_files', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_209197': 'Ev8CCvwCARFNMg/2D3gwpQiCHfep0LcQqsCVhBJpt/iJpDGQN/jWBf2AkZjW6BJVzYI/Muu1b1V3bElmxDkB1WTqVMCDpDR4VYJ4apineY0CATWiuRtERVHjpRlpXgaykc7Tq/gDCZmw+RTN8c/v+ba1gInjlaOrt5q8y/jXhRgsLEby79ddGArSXg824FHB+rXvMUtG6j2KYLaoH3inn2Q2LVay45Qi1daX9IEsbqP0iexMbinA13UbZtjphkmPFQTfH59oELCprlw0/1e7Q1PIcTuGdCZD+X75GhIb6t8oUL2f0VrF+G9Fih1licv6AXpH/bHQZfwRvjxO0NkE8Emh4H8IfmEj3m+SGnwuOs/2HvYHReJ/upv4FM8BqxVLSL44EQmozFrfJdhoZJiBpuEmrzlUydz3SnfFtvqLciJY/d7Rxbued2g/7bHhvsW5KRT9m6VyTzeRHn+0gqoyOsRNSXz7ukXei/+AaKeYC8rrOrT9saIeEzN/qCVx4m7qpQU='}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 5: ToolMessage ---
+content: 'calculator.py\nstring_utils.py\ntest_calculator.py\ntest_string_utils.py'
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 6: AIMessage ---
+content: []
+tool_calls: [{'name': 'git_status', 'args': {}, 'id': 'call_496789', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'git_status', 'arguments': '{}'}, '__gemini_function_call_thought_signatures__': {'call_496789': 'EvsDCvgDARFNMg/sXCL4waJV+X+6QIuqAN7EH6TluFTCKjtRNygs3kXoSjW01dtQgONWH+dyXXabn8alJzk0mVxySrDyYyK1CR398y4HFT60pwznyLASeUTXBqhfQGpiAZUP/g7S/gON4dmivZnwGMMqwPs6b+D9QST7EpDkkIR0snyXo/X6spYHQxUq8NUpa6mAQmZnFnO8Die8d3R2X89pvs1PCXCCZZHNH6oc8OOLMhRpEerQJqxMAiCvHl6+QOShjPDkYqi0TqXhLUyRZkD27Q2MZ6ShnVrbTQGPzfE/N2WuqD7BlwQsXQqsujjSDOFA0F+BeiXkG8toz5QAXLNaT4DTEnfTda9QZSnmyLf3dnVOk+0Kvo+WCBSUNgIt7sMlIX8JrPw6zp64cOu9Zuldc0toQHVcsPS6XdVXp9yL9LobC6qPScHwYg6N6nqLi2Ew5vAVa8iywXG4i0e+6hQkGyx7J79l2rBeYIcWBh5h3PsD1bPDXAZnG184S/ae0l3oaNpyGui3WJPxDwmHx0R3LkHxLIg7VL6xILCt6ptTJcV6xrfEdB2UxdfUTQtyneTwEOSMffWADVjSxVrM4TI9a1CmNA/7uis5bKa70f2F1njFg+B9/LI1mKmlrBWMDlPLUfte4CAteEsf3x5djEIfE25ABxF+r2TGKMeG'}}
+response_metadata: {'finish_reason': 'STOP', 'model_name': 'gemini-3.6-flash', 'safety_ratings': [], 'model_provider': 'google_genai'}
+--- message 7: ToolMessage ---
+content: '## main...origin/main\n M ../.agent_memory/e2e_persistent_task_100.json\n M ../.agent_memory/task_e2e_delivery_101.json\n M ../.agent_memory/task_goal_1.json\n M ../.agent_memory/task_plan_1.json\n M
+tool_calls: None
+additional_kwargs: {}
+response_metadata: {}
+--- message 8: AIMessage ---
+content: []
+tool_calls: [{'name': 'read_file', 'args': {'file_path': 'test_calculator.py'}, 'id': 'call_469870', 'type': 'tool_call'}]
+additional_kwargs: {'function_call': {'name': 'read_file', 'arguments': '{"file_path": "test_calculator.py"}'}, '__gemini_function_call_thought_signatures__': {'call_469870': 'Ev8CCvwCARFNMg+MKhkjljM6dHYhHuoMCeuUZ0a61vHHk2DQvUPtLRtOpMn1BuuOzp+6wjpm3BcAQ3SGWpq75ep9Sd7w3v020wSWDA+iFdPis690cxjc4lYhTT6bATXtpeWxKUDnRuv27QORCLhdW4xMpi0UdN+anO1YeBm6ulYF7hol+VKvUYfy0lAqBoW7h4bAGFB7XuTcvXKf7TAYwNVDVbOib4T/t1Wny6qHKFVB9zMhTO0HysKK9IfAL+IsZe4tWInSq9CufXflZ2obiDrqxa64d6YNG/KIWw1VF7gf2oR7YXs9/dL1BXFY06zt+jcm0/k4TCDlEIrlSjn2hklK/0C6Azn/ymrnDa0hE8QCoY0zpimebsDpqJEEpzwY2r3fIYJYjV1wLiUydLOhuvYJ3iejazueec34Jc79bCnH22Cy5ipW96d+loH2/33JO8xx0n/kOVhiL8iF3yEI0muNhiSD9lQ+LzS2cvy94YFB29N0eiBdgLKchZbyMj0qTnM='}}/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(
+/home/kamalesh/Autonomous Coding Agentic AI/.venv/lib/python3.12/site-packages/langchain_google_genai/chat_models.py:3908: UserWarning: Model 'gemini-3.6-flash' uses fixed sampling defaults; the sampling parameter(s) temperature will be ignored.
+  request = self._build_request_config(

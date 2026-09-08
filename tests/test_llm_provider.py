@@ -342,7 +342,7 @@ def test_first_gemini_invocation_with_tools_bound(monkeypatch):
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
     from app.agent import get_default_llm, SYSTEM_PROMPT
     from app.tools import create_workspace_tools
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
 
     monkeypatch.setenv("LLM_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_API_KEY_1", "mock-gemini-key-1")
@@ -362,9 +362,13 @@ def test_first_gemini_invocation_with_tools_bound(monkeypatch):
         HumanMessage(content="Fix all failing tests"),
     ]
 
-    target = llm_with_tools.candidates[0] if hasattr(llm_with_tools, "candidates") else llm_with_tools
-    with patch.object(target, "invoke", return_value=mock_ai_message):
-        response = llm_with_tools.invoke(input_messages)
+    # Replace candidates with a MagicMock — _ChatModelBinding (Pydantic v2)
+    # doesn't allow patch.object to set/delete arbitrary attributes like 'invoke'.
+    mock_candidate = MagicMock()
+    mock_candidate.invoke.return_value = mock_ai_message
+    llm_with_tools.candidates = [mock_candidate]
+
+    response = llm_with_tools.invoke(input_messages)
 
     assert isinstance(response, AIMessage)
     assert len(response.tool_calls) == 1
@@ -377,7 +381,7 @@ def test_mocked_multi_step_gemini_tool_calling_preserves_thought_signature(monke
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
     from app.agent import get_default_llm, SYSTEM_PROMPT
     from app.tools import create_workspace_tools
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock
 
     monkeypatch.setenv("LLM_PROVIDER", "gemini")
     monkeypatch.setenv("GEMINI_API_KEY_1", "mock-gemini-key-1")
@@ -397,28 +401,26 @@ def test_mocked_multi_step_gemini_tool_calling_preserves_thought_signature(monke
         additional_kwargs={"__gemini_function_call_thought_signatures__": {"call_2": "sig_turn_2"}}
     )
 
-    mock_invoke = MagicMock(side_effect=[turn_1_ai, turn_2_ai])
-
     messages = [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(content="Fix all failing tests"),
     ]
 
-    target = llm_with_tools.candidates[0] if hasattr(llm_with_tools, "candidates") else llm_with_tools
-    with patch.object(target, "invoke", mock_invoke):
-        # Turn 1
-        res1 = llm_with_tools.invoke(messages)
-        messages.append(res1)
-        messages.append(ToolMessage(content="def add(a, b): return a + b", tool_call_id="call_1", name="read_file"))
+    # Replace candidates with a MagicMock — _ChatModelBinding (Pydantic v2)
+    # doesn't allow patch.object to set/delete arbitrary attributes like 'invoke'.
+    mock_candidate = MagicMock()
+    mock_candidate.invoke.side_effect = [turn_1_ai, turn_2_ai]
+    llm_with_tools.candidates = [mock_candidate]
 
-        # Turn 2 (position 2 tool call)
-        res2 = llm_with_tools.invoke(messages)
-        messages.append(res2)
-        messages.append(ToolMessage(content="Status: passed", tool_call_id="call_2", name="run_tests"))
+    # Turn 1
+    res1 = llm_with_tools.invoke(messages)
+    messages.append(res1)
+    messages.append(ToolMessage(content="def add(a, b): return a + b", tool_call_id="call_1", name="read_file"))
+
+    # Turn 2 (position 2 tool call)
+    res2 = llm_with_tools.invoke(messages)
+    messages.append(res2)
+    messages.append(ToolMessage(content="Status: passed", tool_call_id="call_2", name="run_tests"))
 
     assert messages[2].additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_1": "sig_turn_1"}
     assert messages[4].additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_2": "sig_turn_2"}
-
-
-
-

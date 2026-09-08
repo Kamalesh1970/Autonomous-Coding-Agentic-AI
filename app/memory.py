@@ -180,6 +180,9 @@ def serialize_state(state: AgentState, status: str = "running") -> dict[str, Any
     commit_created = bool(state.get("commit_created", False))
     push_requested = bool(state.get("push_requested", False))
     pr_requested = bool(state.get("pr_requested", False))
+    plan_approval_required = bool(state.get("plan_approval_required", False))
+    plan_approval_status = str(state.get("plan_approval_status") or "not_required")
+    plan_content = state.get("plan_content")
 
     mode = str(state.get("mode") or "single_agent")
     agent_role = state.get("agent_role")
@@ -222,6 +225,9 @@ def serialize_state(state: AgentState, status: str = "running") -> dict[str, Any
         "commit_created": commit_created,
         "push_requested": push_requested,
         "pr_requested": pr_requested,
+        "plan_approval_required": plan_approval_required,
+        "plan_approval_status": plan_approval_status,
+        "plan_content": plan_content,
         "mode": mode,
         "agent_role": agent_role,
         "analysis_result": analysis_result,
@@ -270,6 +276,9 @@ def deserialize_state(data: dict[str, Any]) -> AgentState:
     commit_created = bool(data.get("commit_created", False))
     push_requested = bool(data.get("push_requested", False))
     pr_requested = bool(data.get("pr_requested", False))
+    plan_approval_required = bool(data.get("plan_approval_required", False))
+    plan_approval_status = data.get("plan_approval_status", "not_required")
+    plan_content = data.get("plan_content")
 
     mode = data.get("mode", "single_agent")
     agent_role = data.get("agent_role")
@@ -311,6 +320,9 @@ def deserialize_state(data: dict[str, Any]) -> AgentState:
         commit_created=commit_created,
         push_requested=push_requested,
         pr_requested=pr_requested,
+        plan_approval_required=plan_approval_required,
+        plan_approval_status=plan_approval_status,
+        plan_content=plan_content,
         mode=mode,
         agent_role=agent_role,
         analysis_result=analysis_result,

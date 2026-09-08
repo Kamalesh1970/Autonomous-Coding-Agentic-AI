@@ -10,7 +10,8 @@ __pycache__/
 venv/
 ENV/
 env/
-
+/home/kamalesh/Autonomous Coding Agentic AI/.agent_memory
+.agent_memory
 # IDE / Testing
 .pytest_cache/
 .coverage

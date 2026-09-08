@@ -165,13 +165,17 @@ class AgentState(TypedDict, total=False):
         current_branch: Current active Git branch name.
         target_branch: Target base branch for pull requests.
         delivery_action: Delivery action identifier ('commit', 'push', 'pull_request').
-        approval_required: Boolean flag indicating if human approval is pending.
-        approval_status: Current approval state ('not_required', 'pending', 'approved', 'rejected').
+        approval_required: Boolean flag indicating if human approval is pending for Git delivery.
+        approval_status: Current Git-delivery approval state ('not_required', 'pending', 'approved', 'rejected').
         approval_reason: Explanation of why approval was requested or rejected.
         commit_message: Proposed/executed commit message.
         commit_created: Boolean flag indicating whether commit was created.
         push_requested: Boolean flag indicating whether push was requested.
         pr_requested: Boolean flag indicating whether pull request creation was requested.
+        plan_approval_required: Boolean flag indicating if human approval is pending for the execution plan
+            (only set when REQUIRE_PLAN_APPROVAL=true).
+        plan_approval_status: Current plan-approval state ('not_required', 'pending', 'approved', 'rejected').
+        plan_content: Formatted plan text surfaced to the caller while plan approval is pending.
     """
     messages: Annotated[Sequence[BaseMessage], add_messages]
     user_goal: str
@@ -197,6 +201,11 @@ class AgentState(TypedDict, total=False):
     commit_created: bool
     push_requested: bool
     pr_requested: bool
+    # --- Plan approval gate (Phase 15+, REQUIRE_PLAN_APPROVAL=true) ---
+    plan_approval_required: bool
+    plan_approval_status: ApprovalStatus
+    plan_content: str | None
+    # --- Multi-agent & evaluation fields ---
     mode: ExecutionMode
     agent_role: AgentRole | None
     analysis_result: AnalysisResult | None
