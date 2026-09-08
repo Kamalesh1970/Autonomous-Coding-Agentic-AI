@@ -61,6 +61,16 @@ def is_retryable_error(error: Exception) -> bool:
     err_str = str(error).lower()
     err_type = type(error).__name__.lower()
 
+    # Non-retryable configuration, schema, or account billing errors (402 insufficient credits)
+    non_retryable_patterns = [
+        "404", "not_found", "no longer available", "invalid model",
+        "402", "insufficient credits", "insufficient_credits", "payment_required", "upgrade to a paid account",
+        "invalid_argument", "malformed request", "thought_signature"
+    ]
+    for pattern in non_retryable_patterns:
+        if pattern in err_str:
+            return False
+
     # Retryable provider errors (quota, rate limits, server errors, auth key failure)
     retryable_patterns = [
         "429", "quota", "rate limit", "ratelimit", "resource_exhausted", "resourceexhausted",
@@ -70,15 +80,6 @@ def is_retryable_error(error: Exception) -> bool:
     for pattern in retryable_patterns:
         if pattern in err_str or pattern in err_type:
             return True
-
-    # Non-retryable configuration / schema errors
-    non_retryable_patterns = [
-        "404", "not_found", "no longer available", "invalid model",
-        "invalid_argument", "malformed request", "thought_signature"
-    ]
-    for pattern in non_retryable_patterns:
-        if pattern in err_str:
-            return False
 
     if "400" in err_str and ("bad request" in err_str or "status" in err_str or "invalid" in err_str):
         return False
@@ -150,6 +151,16 @@ class GeminiChatOpenAI(ChatOpenAI):
         return payload
 
 
+def sanitize_log_output(text: str) -> str:
+    """Sanitizes text so sensitive API keys are never leaked in logs or error output."""
+    if not text:
+        return ""
+    import re
+    text = re.sub(r"(AIzaSy[A-Za-z0-9_-]{33})", "[REDACTED_API_KEY]", text)
+    text = re.sub(r"(sk-[A-Za-z0-9_-]{20,})", "[REDACTED_API_KEY]", text)
+    return text
+
+
 class FailoverChatModel(BaseChatModel):
     """ChatModel wrapper that manages key failover and provider fallback transparently."""
 
@@ -173,7 +184,8 @@ class FailoverChatModel(BaseChatModel):
             except Exception as e:
                 last_error = e
                 if is_retryable_error(e) and i < len(self.candidates) - 1:
-                    print(f"Provider attempt {i + 1} failed with retryable error ({type(e).__name__}: {e}); trying next configured option.")
+                    clean_err = sanitize_log_output(str(e))
+                    print(f"Provider attempt {i + 1} failed with retryable error ({type(e).__name__}: {clean_err}); trying next configured option.")
                     continue
                 raise e
         if last_error:
@@ -188,7 +200,8 @@ class FailoverChatModel(BaseChatModel):
             except Exception as e:
                 last_error = e
                 if is_retryable_error(e) and i < len(self.candidates) - 1:
-                    print(f"Provider attempt {i + 1} failed with retryable error ({type(e).__name__}: {e}); trying next configured option.")
+                    clean_err = sanitize_log_output(str(e))
+                    print(f"Provider attempt {i + 1} failed with retryable error ({type(e).__name__}: {clean_err}); trying next configured option.")
                     continue
                 raise e
         if last_error:
@@ -228,6 +241,9 @@ def get_default_llm() -> BaseChatModel:
         if "gemini-2.0" in model_name:
             model_name = "gemini-3.6-flash"
 
+        import warnings
+        warnings.filterwarnings("ignore", message=".*uses fixed sampling defaults.*")
+
         candidates = []
         for k in gemini_keys:
             candidates.append(
@@ -235,7 +251,6 @@ def get_default_llm() -> BaseChatModel:
                     model=model_name,
                     google_api_key=k,
                     max_retries=1,
-                    temperature=0,
                 )
             )
 
@@ -243,6 +258,9 @@ def get_default_llm() -> BaseChatModel:
         openrouter_key = os.getenv("OPENROUTER_API_KEY")
         if openrouter_key and openrouter_key != "your_openrouter_api_key_here":
             openrouter_model = os.getenv("OPENROUTER_MODEL") or os.getenv("LLM_MODEL") or "openai/gpt-4o-mini"
+            openrouter_max_tokens_val = os.getenv("OPENROUTER_MAX_TOKENS", "8192").strip()
+            openrouter_max_tokens = int(openrouter_max_tokens_val) if openrouter_max_tokens_val.isdigit() else 8192
+
             extra_headers = {}
             site_url = os.getenv("OPENROUTER_SITE_URL")
             app_name = os.getenv("OPENROUTER_APP_NAME")
@@ -257,6 +275,7 @@ def get_default_llm() -> BaseChatModel:
                     api_key=openrouter_key,
                     base_url="https://openrouter.ai/api/v1",
                     default_headers=extra_headers if extra_headers else None,
+                    max_tokens=openrouter_max_tokens,
                     temperature=0,
                 )
             )
@@ -273,6 +292,8 @@ def get_default_llm() -> BaseChatModel:
         if not api_key or api_key == "your_openrouter_api_key_here":
             raise ValueError("OPENROUTER_API_KEY is required when LLM_PROVIDER=openrouter")
         model_name = os.getenv("LLM_MODEL") or os.getenv("OPENROUTER_MODEL_NAME") or os.getenv("OPENROUTER_MODEL") or "openai/gpt-4o-mini"
+        openrouter_max_tokens_val = os.getenv("OPENROUTER_MAX_TOKENS", "8192").strip()
+        openrouter_max_tokens = int(openrouter_max_tokens_val) if openrouter_max_tokens_val.isdigit() else 8192
 
         extra_headers = {}
         site_url = os.getenv("OPENROUTER_SITE_URL")
@@ -287,6 +308,7 @@ def get_default_llm() -> BaseChatModel:
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
             default_headers=extra_headers if extra_headers else None,
+            max_tokens=openrouter_max_tokens,
             temperature=0,
         )
 
@@ -431,6 +453,9 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
 
             elif "Successfully committed changes" in content:
                 commit_created = True
+
+            elif content.startswith("Error") or "Error" in content or "Ambiguous" in content or "Access denied" in content:
+                failed_tool_messages += 1
 
     if plan and isinstance(plan, dict) and "tasks" in plan and plan["tasks"]:
         completed_indices = [
@@ -852,8 +877,22 @@ def main():
         ver_result = final_state.get("verification_result")
         retry_count = final_state.get("retry_count", 0)
 
+        log_level = os.getenv("AGENT_LOG_LEVEL", "normal").strip().lower()
+
         print(f"Task ID: {task_id}")
         print(f"Execution Status: {exec_status}")
+
+        if log_level == "debug":
+            print("\n=== DEBUG: Message Metadata Trace ===")
+            for msg in messages:
+                role = msg.__class__.__name__
+                add_kw = getattr(msg, "additional_kwargs", {})
+                resp_meta = getattr(msg, "response_metadata", {})
+                print(f"[{role}] content: {repr(getattr(msg, 'content', ''))[:100]}")
+                if add_kw:
+                    print(f"  additional_kwargs: {sanitize_log_output(str(add_kw))}")
+                if resp_meta:
+                    print(f"  response_metadata: {sanitize_log_output(str(resp_meta))}")
 
         print("\n=== Agent Trace ===")
         for msg in messages:
@@ -864,12 +903,15 @@ def main():
             if role == "HumanMessage":
                 print(f"\n[User Goal]: {content}")
             elif role == "AIMessage":
-                print(f"\n[Agent]: {content}")
+                if content:
+                    print(f"\n[Agent]: {content}")
                 if tool_calls:
                     for tc in tool_calls:
-                        print(f"  → Tool Call: {tc.get('name')}({tc.get('args')})")
+                        sanitized_args = sanitize_log_output(str(tc.get('args', {})))
+                        print(f"  → Tool Call: {tc.get('name')}({sanitized_args})")
             elif role == "ToolMessage":
-                print(f"\n[Observation]:\n{content}")
+                sanitized_obs = sanitize_log_output(content)
+                print(f"\n[Observation]:\n{sanitized_obs}")
 
         if modified_files:
             print("\n=== Modified Files ===")

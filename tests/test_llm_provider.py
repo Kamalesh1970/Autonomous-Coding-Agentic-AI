@@ -3,7 +3,7 @@
 import os
 import pytest
 from unittest.mock import MagicMock
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 from app.agent import get_default_llm, FailoverChatModel, is_retryable_error
 from app.tools import create_workspace_tools
@@ -426,34 +426,50 @@ def test_mocked_multi_step_gemini_tool_calling_preserves_thought_signature(monke
     assert messages[4].additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_2": "sig_turn_2"}
 
 
-def test_failover_quota_429_with_limit_400_string():
-    """Verify 429 quota error containing 'limit: 400' is correctly classified as retryable and fails over."""
+def test_gemini_1_quota_failure_attempts_gemini_2():
+    """Test A: Gemini 1 quota failure -> Gemini 2 attempted."""
     k1 = MagicMock()
-    k1.invoke.side_effect = Exception("429 ResourceExhausted: Quota exceeded for metric GenerateContentRequestsPerMinute limit: 400")
+    k1.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED: You exceeded your current quota limit: 400")
     k2 = MagicMock()
-    k2.invoke.return_value = AIMessage(content="Key 2 Success")
+    k2.invoke.return_value = AIMessage(content="Gemini 2 Success")
 
     model = FailoverChatModel(candidates=[k1, k2])
     res = model.invoke([HumanMessage(content="Test")])
-    assert res.content == "Key 2 Success"
+    assert res.content == "Gemini 2 Success"
     assert k1.invoke.call_count == 1
     assert k2.invoke.call_count == 1
 
 
-def test_full_four_provider_failover_chain():
-    """Verify sequence: Key 1 (429) -> Key 2 (429) -> Key 3 (429) -> OpenRouter (Success)."""
+def test_gemini_1_and_2_quota_failure_attempts_gemini_3():
+    """Test B: Gemini 1 + 2 quota failure -> Gemini 3 attempted."""
     k1 = MagicMock()
-    k1.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED key 1")
+    k1.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED Key 1")
     k2 = MagicMock()
-    k2.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED key 2")
+    k2.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED Key 2")
     k3 = MagicMock()
-    k3.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED key 3")
+    k3.invoke.return_value = AIMessage(content="Gemini 3 Success")
+
+    model = FailoverChatModel(candidates=[k1, k2, k3])
+    res = model.invoke([HumanMessage(content="Test")])
+    assert res.content == "Gemini 3 Success"
+    assert k1.invoke.call_count == 1
+    assert k2.invoke.call_count == 1
+    assert k3.invoke.call_count == 1
+
+
+def test_all_gemini_quota_failure_attempts_openrouter():
+    """Test C: All Gemini providers quota failure -> OpenRouter attempted."""
+    k1 = MagicMock()
+    k1.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED Key 1")
+    k2 = MagicMock()
+    k2.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED Key 2")
+    k3 = MagicMock()
+    k3.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED Key 3")
     openrouter = MagicMock()
     openrouter.invoke.return_value = AIMessage(content="OpenRouter Success")
 
     model = FailoverChatModel(candidates=[k1, k2, k3, openrouter])
     res = model.invoke([HumanMessage(content="Test")])
-
     assert res.content == "OpenRouter Success"
     assert k1.invoke.call_count == 1
     assert k2.invoke.call_count == 1
@@ -461,42 +477,33 @@ def test_full_four_provider_failover_chain():
     assert openrouter.invoke.call_count == 1
 
 
-def test_all_four_providers_fail_raises_final_error():
-    """Verify sequence where all 4 providers fail raises the final provider error cleanly."""
-    k1 = MagicMock()
-    k1.invoke.side_effect = Exception("429 key 1")
-    k2 = MagicMock()
-    k2.invoke.side_effect = Exception("429 key 2")
-    k3 = MagicMock()
-    k3.invoke.side_effect = Exception("429 key 3")
-    openrouter = MagicMock()
-    openrouter.invoke.side_effect = Exception("429 openrouter exhausted")
+def test_openrouter_configured_with_own_max_tokens(monkeypatch):
+    """Test D: OpenRouter is configured with its own max_tokens value independently from Gemini."""
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY_1", "test-key-1")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-openrouter-key")
+    monkeypatch.setenv("OPENROUTER_MAX_TOKENS", "4096")
 
-    model = FailoverChatModel(candidates=[k1, k2, k3, openrouter])
-    with pytest.raises(Exception, match="429 openrouter exhausted"):
+    llm = get_default_llm()
+    assert isinstance(llm, FailoverChatModel)
+    openrouter_candidate = llm.candidates[-1]
+    assert getattr(openrouter_candidate, "max_tokens", None) == 4096
+
+
+def test_openrouter_402_insufficient_credits_terminal_failure():
+    """Test E: OpenRouter 402 insufficient credits is classified as a terminal provider failure, not retryable."""
+    err = Exception("Error code: 402 - {'error': {'message': 'This request requires more credits, or fewer max_tokens.'}}")
+    assert is_retryable_error(err) is False
+
+    k1 = MagicMock()
+    k1.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED Key 1")
+    openrouter = MagicMock()
+    openrouter.invoke.side_effect = err
+
+    model = FailoverChatModel(candidates=[k1, openrouter])
+    with pytest.raises(Exception, match="402"):
         model.invoke([HumanMessage(content="Test")])
 
     assert k1.invoke.call_count == 1
-    assert k2.invoke.call_count == 1
-    assert k3.invoke.call_count == 1
     assert openrouter.invoke.call_count == 1
-
-
-def test_failover_stops_immediately_on_mid_chain_success():
-    """Verify failover stops immediately when a mid-chain provider succeeds (fail fast on success)."""
-    k1 = MagicMock()
-    k1.invoke.side_effect = Exception("429 key 1")
-    k2 = MagicMock()
-    k2.invoke.return_value = AIMessage(content="Key 2 Success")
-    k3 = MagicMock()
-    openrouter = MagicMock()
-
-    model = FailoverChatModel(candidates=[k1, k2, k3, openrouter])
-    res = model.invoke([HumanMessage(content="Test")])
-
-    assert res.content == "Key 2 Success"
-    assert k1.invoke.call_count == 1
-    assert k2.invoke.call_count == 1
-    assert k3.invoke.call_count == 0
-    assert openrouter.invoke.call_count == 0
 

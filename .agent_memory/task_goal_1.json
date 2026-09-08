@@ -2,7 +2,7 @@
   "version": "1.0",
   "task_id": "task_goal_1",
   "user_goal": "Original long-running goal",
-  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-1/test_goal_survives_resume0",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-2/test_goal_survives_resume0",
   "status": "running",
   "plan": null,
   "retrieved_context": [],
@@ -37,7 +37,7 @@
   "max_multi_agent_iterations": 3,
   "execution_trace": [
     {
-      "timestamp": 1788864980.508,
+      "timestamp": 1788889175.445,
       "event_type": "agent_start",
       "agent_role": "single_agent",
       "tool_name": null,
@@ -52,7 +52,7 @@
     {
       "type": "HumanMessage",
       "content": "Original long-running goal",
-      "id": "d8e48277-5ee1-4901-b996-ec9853b74763"
+      "id": "223652e1-c6e1-421e-8649-b2457581feba"
     }
   ]
 }

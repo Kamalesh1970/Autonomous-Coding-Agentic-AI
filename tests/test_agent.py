@@ -1189,4 +1189,65 @@ def test_all_tasks_completed_on_successful_run(tmp_path: Path):
         assert t.get("status") == "completed", f"Task {t.get('id')} status is {t.get('status')}, expected completed"
 
 
+def test_recovery_retry_metric_increments_on_tool_failure(tmp_path: Path):
+    """Verify that triggering a recoverable tool error (e.g. ambiguous replace_in_file) increments retry_count to 1."""
+    init_git_repo(tmp_path)
+    calc_file = tmp_path / "calc.py"
+    calc_file.write_text("def mul(a, b):\n    return a + b\ndef add(a, b):\n    return a + b\n")
+
+    responses = [
+        AIMessage(
+            content="Attempting replace_in_file without surrounding context.",
+            tool_calls=[{
+                "name": "replace_in_file",
+                "args": {
+                    "file_path": "calc.py",
+                    "old_text": "return a + b",
+                    "new_text": "return a * b",
+                },
+                "id": "c1",
+            }],
+        ),
+        AIMessage(
+            content="Retrying replace_in_file with surrounding context.",
+            tool_calls=[{
+                "name": "replace_in_file",
+                "args": {
+                    "file_path": "calc.py",
+                    "old_text": "def mul(a, b):\n    return a + b",
+                    "new_text": "def mul(a, b):\n    return a * b",
+                },
+                "id": "c2",
+            }],
+        ),
+        AIMessage(
+            content="Verifying goal.",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {
+                    "status": "passed",
+                    "summary": "calc.py fixed after retry",
+                    "evidence": ["mul returns a*b"],
+                },
+                "id": "c3",
+            }],
+        ),
+        AIMessage(content="Done."),
+    ]
+    mock_llm = MockLLM(responses=responses)
+
+    state = run_agent(
+        goal="Fix mul in calc.py",
+        workspace_root=str(tmp_path),
+        llm=mock_llm,
+        task_id="recovery_retry_metric_test",
+        storage_dir=str(tmp_path / "mem"),
+    )
+
+    assert state.get("retry_count") == 1
+    report = state.get("evaluation_report") or {}
+    assert report.get("retry_count") == 1
+
+
+
 
