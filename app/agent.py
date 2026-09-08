@@ -865,44 +865,75 @@ def _print_cli_header(goal: str, workspace_root: str) -> None:
     print("\nAgent started...\n")
 
 
-def _print_cli_progress(messages: list) -> None:
-    """Prints clean high-level progress steps based on the message trace."""
+def _print_cli_progress(messages: list, final_state: dict | None = None) -> None:
+    """Prints clean high-level progress steps based on actual message trace and execution events."""
     step_num = 1
-    seen_steps = set()
+    seen_events = []
+    has_modified = False
+    has_test_failure = False
 
     for msg in messages:
         role = msg.__class__.__name__
         tool_calls = getattr(msg, "tool_calls", None) or []
+        content = getattr(msg, "content", "")
+
+        if role == "ToolMessage" or msg.__class__.__name__ == "ToolMessage":
+            if "Status: failed" in content or "Status: error" in content:
+                has_test_failure = True
+                if "diagnosing" not in seen_events:
+                    seen_events.append("diagnosing")
+                    print(f"[{step_num}] Analyzing failures")
+                    step_num += 1
+            elif "Error" in content or "Ambiguous" in content:
+                if "retrying" not in seen_events:
+                    seen_events.append("retrying")
+                    print(f"[{step_num}] Retrying fixes")
+                    step_num += 1
 
         for tc in tool_calls:
             name = tc.get("name")
-            if name in ("list_files", "read_file", "search_code", "retrieve_relevant_context", "retrieve_hybrid_context") and "understanding" not in seen_steps:
-                seen_steps.add("understanding")
-                print(f"[{step_num}] Understanding task")
+            if name in ("list_files", "read_file", "search_code") and "repo_understanding" not in seen_events:
+                seen_events.append("repo_understanding")
+                print(f"[{step_num}] Understanding repository")
                 step_num += 1
-            elif name == "run_tests" and "initial_testing" not in seen_steps and "modifying" not in seen_steps:
-                seen_steps.add("initial_testing")
-                print(f"[{step_num}] Running tests")
+            elif name in ("retrieve_relevant_context", "retrieve_hybrid_context") or (name and name.startswith("retrieve_")):
+                if "retrieval" not in seen_events:
+                    seen_events.append("retrieval")
+                    print(f"[{step_num}] Retrieving relevant code")
+                    step_num += 1
+            elif name == "run_tests" and not has_modified and "initial_tests" not in seen_events:
+                seen_events.append("initial_tests")
+                print(f"[{step_num}] Running initial tests")
                 step_num += 1
-            elif name == "create_plan" and "planning" not in seen_steps:
-                seen_steps.add("planning")
+            elif name in ("create_plan", "revise_plan") and "planning" not in seen_events:
+                seen_events.append("planning")
                 print(f"[{step_num}] Planning changes")
                 step_num += 1
-            elif name in ("write_file", "replace_in_file") and "modifying" not in seen_steps:
-                seen_steps.add("modifying")
-                print(f"[{step_num}] Modifying code")
+            elif name in ("write_file", "replace_in_file"):
+                has_modified = True
+                if "modifying" not in seen_events:
+                    seen_events.append("modifying")
+                    print(f"[{step_num}] Modifying files")
+                    step_num += 1
+                elif "retrying" not in seen_events and ("diagnosing" in seen_events or has_test_failure):
+                    seen_events.append("retrying")
+                    print(f"[{step_num}] Retrying fixes")
+                    step_num += 1
+            elif name == "run_tests" and has_modified and "validation" not in seen_events:
+                seen_events.append("validation")
+                print(f"[{step_num}] Running validation")
                 step_num += 1
-            elif name == "run_tests" and "modifying" in seen_steps and "retesting" not in seen_steps:
-                seen_steps.add("retesting")
-                print(f"[{step_num}] Testing changes")
+            elif name == "request_human_approval" and "approval" not in seen_events:
+                seen_events.append("approval")
+                print(f"[{step_num}] Requesting human approval")
                 step_num += 1
-            elif name == "verify_goal" and "verifying" not in seen_steps:
-                seen_steps.add("verifying")
+            elif name == "verify_goal" and "verifying" not in seen_events:
+                seen_events.append("verifying")
                 print(f"[{step_num}] Verifying goal")
                 step_num += 1
 
-    if not seen_steps:
-        print(f"[{step_num}] Processing goal")
+    if not seen_events:
+        print(f"[{step_num}] Processing task")
 
 
 def _print_cli_summary(final_state: dict) -> None:
@@ -917,6 +948,22 @@ def _print_cli_summary(final_state: dict) -> None:
 
     val_status = val_result.get("status") if isinstance(val_result, dict) else None
     ver_status_val = ver_result.get("status") if isinstance(ver_result, dict) else None
+
+    # Handle ESCALATED status
+    if (
+        outcome == "ESCALATED"
+        or final_state.get("plan_approval_required")
+        or (final_state.get("approval_required") and final_state.get("approval_status") == "pending")
+    ):
+        reason = (
+            final_state.get("approval_reason")
+            or ("plan pending approval" if final_state.get("plan_approval_required") else "Git delivery approval pending")
+        )
+        print("\n" + "=" * 50)
+        print("ESCALATED")
+        print("=" * 50)
+        print(f"\nReason:\n{reason}")
+        return
 
     is_success = (
         outcome == "SUCCESS"
