@@ -156,8 +156,8 @@ def sanitize_log_output(text: str) -> str:
     if not text:
         return ""
     import re
-    text = re.sub(r"(AIzaSy[A-Za-z0-9_-]{33})", "[REDACTED_API_KEY]", text)
-    text = re.sub(r"(sk-[A-Za-z0-9_-]{20,})", "[REDACTED_API_KEY]", text)
+    text = re.sub(r"AIzaSy[A-Za-z0-9_-]{10,}", "[REDACTED_API_KEY]", text)
+    text = re.sub(r"sk-(proj-)?[A-Za-z0-9_-]{15,}", "[REDACTED_API_KEY]", text)
     return text
 
 
@@ -853,6 +853,101 @@ def approve_task(
 
 
 
+def _print_cli_header(goal: str, workspace_root: str) -> None:
+    """Prints clean professional header for normal CLI mode."""
+    print("=" * 50)
+    print("        AUTONOMOUS CODING AGENT")
+    print("=" * 50)
+    print("\nGoal:")
+    print(goal)
+    print("\nWorkspace:")
+    print(os.path.abspath(workspace_root))
+    print("\nAgent started...\n")
+
+
+def _print_cli_progress(messages: list) -> None:
+    """Prints clean high-level progress steps based on the message trace."""
+    step_num = 1
+    seen_steps = set()
+
+    for msg in messages:
+        role = msg.__class__.__name__
+        tool_calls = getattr(msg, "tool_calls", None) or []
+
+        for tc in tool_calls:
+            name = tc.get("name")
+            if name in ("list_files", "read_file", "search_code", "retrieve_relevant_context", "retrieve_hybrid_context") and "understanding" not in seen_steps:
+                seen_steps.add("understanding")
+                print(f"[{step_num}] Understanding task")
+                step_num += 1
+            elif name == "run_tests" and "initial_testing" not in seen_steps and "modifying" not in seen_steps:
+                seen_steps.add("initial_testing")
+                print(f"[{step_num}] Running tests")
+                step_num += 1
+            elif name == "create_plan" and "planning" not in seen_steps:
+                seen_steps.add("planning")
+                print(f"[{step_num}] Planning changes")
+                step_num += 1
+            elif name in ("write_file", "replace_in_file") and "modifying" not in seen_steps:
+                seen_steps.add("modifying")
+                print(f"[{step_num}] Modifying code")
+                step_num += 1
+            elif name == "run_tests" and "modifying" in seen_steps and "retesting" not in seen_steps:
+                seen_steps.add("retesting")
+                print(f"[{step_num}] Testing changes")
+                step_num += 1
+            elif name == "verify_goal" and "verifying" not in seen_steps:
+                seen_steps.add("verifying")
+                print(f"[{step_num}] Verifying goal")
+                step_num += 1
+
+    if not seen_steps:
+        print(f"[{step_num}] Processing goal")
+
+
+def _print_cli_summary(final_state: dict) -> None:
+    """Prints clean final result block based on actual state and metrics."""
+    exec_status = final_state.get("status", "completed")
+    val_result = final_state.get("validation_result") or {}
+    ver_result = final_state.get("verification_result") or {}
+    report = final_state.get("evaluation_report") or {}
+    outcome = final_state.get("final_outcome") or report.get("final_outcome") or "SUCCESS"
+    modified_files = final_state.get("modified_files") or []
+    retry_count = final_state.get("retry_count", 0)
+
+    val_status = val_result.get("status") if isinstance(val_result, dict) else None
+    ver_status_val = ver_result.get("status") if isinstance(ver_result, dict) else None
+
+    is_success = (
+        outcome == "SUCCESS"
+        or (exec_status == "completed" and ver_status_val in ("passed", None) and val_status in ("passed", None))
+    ) and outcome not in ("ESCALATED", "FAILED")
+
+    if is_success:
+        test_summary = val_result.get("summary") if isinstance(val_result, dict) and val_result.get("summary") else "All tests passed successfully."
+        ver_display = ver_status_val.upper() if ver_status_val else "PASSED"
+
+        print("\n" + "=" * 50)
+        print("SUCCESS")
+        print("=" * 50)
+        print(f"\nTests: {test_summary}")
+        print(f"Files modified: {len(modified_files)}")
+        print(f"Recovery retries: {retry_count}")
+        print(f"Goal verification: {ver_display}")
+    else:
+        reason = (
+            final_state.get("approval_reason")
+            or (ver_result.get("summary") if isinstance(ver_result, dict) else None)
+            or (val_result.get("summary") if isinstance(val_result, dict) else None)
+            or report.get("summary")
+            or f"Task ended with status '{exec_status}'"
+        )
+        print("\n" + "=" * 50)
+        print("FAILED")
+        print("=" * 50)
+        print(f"\nReason:\n{reason}")
+
+
 def main():
     """CLI entrypoint for running the agent directly."""
     if len(sys.argv) < 2:
@@ -861,10 +956,14 @@ def main():
 
     goal = sys.argv[1]
     workspace_root = sys.argv[2] if len(sys.argv) > 2 else "."
+    log_level = os.getenv("AGENT_LOG_LEVEL", "normal").strip().lower()
 
-    print(f"Goal: {goal}")
-    print(f"Workspace Root: {os.path.abspath(workspace_root)}")
-    print("-" * 50)
+    if log_level == "debug":
+        print(f"Goal: {goal}")
+        print(f"Workspace Root: {os.path.abspath(workspace_root)}")
+        print("-" * 50)
+    else:
+        _print_cli_header(goal=goal, workspace_root=workspace_root)
 
     try:
         final_state = run_agent(goal=goal, workspace_root=workspace_root)
@@ -877,12 +976,9 @@ def main():
         ver_result = final_state.get("verification_result")
         retry_count = final_state.get("retry_count", 0)
 
-        log_level = os.getenv("AGENT_LOG_LEVEL", "normal").strip().lower()
-
-        print(f"Task ID: {task_id}")
-        print(f"Execution Status: {exec_status}")
-
         if log_level == "debug":
+            print(f"Task ID: {task_id}")
+            print(f"Execution Status: {exec_status}")
             print("\n=== DEBUG: Message Metadata Trace ===")
             for msg in messages:
                 role = msg.__class__.__name__
@@ -894,58 +990,67 @@ def main():
                 if resp_meta:
                     print(f"  response_metadata: {sanitize_log_output(str(resp_meta))}")
 
-        print("\n=== Agent Trace ===")
-        for msg in messages:
-            role = msg.__class__.__name__
-            content = getattr(msg, "content", "")
-            tool_calls = getattr(msg, "tool_calls", None)
+            print("\n=== Agent Trace ===")
+            for msg in messages:
+                role = msg.__class__.__name__
+                content = getattr(msg, "content", "")
+                tool_calls = getattr(msg, "tool_calls", None)
 
-            if role == "HumanMessage":
-                print(f"\n[User Goal]: {content}")
-            elif role == "AIMessage":
-                if content:
-                    print(f"\n[Agent]: {content}")
-                if tool_calls:
-                    for tc in tool_calls:
-                        sanitized_args = sanitize_log_output(str(tc.get('args', {})))
-                        print(f"  → Tool Call: {tc.get('name')}({sanitized_args})")
-            elif role == "ToolMessage":
-                sanitized_obs = sanitize_log_output(content)
-                print(f"\n[Observation]:\n{sanitized_obs}")
+                if role == "HumanMessage":
+                    print(f"\n[User Goal]: {content}")
+                elif role == "AIMessage":
+                    if content:
+                        print(f"\n[Agent]: {content}")
+                    if tool_calls:
+                        for tc in tool_calls:
+                            sanitized_args = sanitize_log_output(str(tc.get('args', {})))
+                            print(f"  → Tool Call: {tc.get('name')}({sanitized_args})")
+                elif role == "ToolMessage":
+                    sanitized_obs = sanitize_log_output(content)
+                    print(f"\n[Observation]:\n{sanitized_obs}")
 
-        if modified_files:
-            print("\n=== Modified Files ===")
-            for mf in modified_files:
-                print(f"  • {mf}")
+            if modified_files:
+                print("\n=== Modified Files ===")
+                for mf in modified_files:
+                    print(f"  • {mf}")
 
-        if val_result:
-            print("\n=== Validation Result ===")
-            print(f"Status: {val_result.get('status')}")
-            print(f"Summary: {val_result.get('summary')}")
-            print(f"Recovery Retries Performed: {retry_count}")
+            if val_result:
+                print("\n=== Validation Result ===")
+                print(f"Status: {val_result.get('status')}")
+                print(f"Summary: {val_result.get('summary')}")
+                print(f"Recovery Retries Performed: {retry_count}")
 
-        if ver_result:
-            print("\n=== Goal Verification Result ===")
-            print(f"Status: {ver_result.get('status')}")
-            print(f"Summary: {ver_result.get('summary')}")
-            if ver_result.get("evidence"):
-                print("Evidence:")
-                for ev in ver_result.get("evidence", []):
-                    print(f"  • {ev}")
+            if ver_result:
+                print("\n=== Goal Verification Result ===")
+                print(f"Status: {ver_result.get('status')}")
+                print(f"Summary: {ver_result.get('summary')}")
+                if ver_result.get("evidence"):
+                    print("Evidence:")
+                    for ev in ver_result.get("evidence", []):
+                        print(f"  • {ev}")
 
-        if plan:
-            print("\n=== Final Plan State ===")
-            print(f"Goal: {plan.get('goal')}")
-            print(f"Revision Count: {plan.get('revision_count', 0)}")
-            if plan.get("revision_reason"):
-                print(f"Revision Reason: {plan.get('revision_reason')}")
-            print("Tasks:")
-            for t in plan.get("tasks", []):
-                deps = f" (deps: {t.get('dependencies')})" if t.get("dependencies") else ""
-                print(f"  [{t.get('status').upper()}] {t.get('id')}: {t.get('title')}{deps}")
+            if plan:
+                print("\n=== Final Plan State ===")
+                print(f"Goal: {plan.get('goal')}")
+                print(f"Revision Count: {plan.get('revision_count', 0)}")
+                if plan.get("revision_reason"):
+                    print(f"Revision Reason: {plan.get('revision_reason')}")
+                print("Tasks:")
+                for t in plan.get("tasks", []):
+                    deps = f" (deps: {t.get('dependencies')})" if t.get("dependencies") else ""
+                    print(f"  [{t.get('status').upper()}] {t.get('id')}: {t.get('title')}{deps}")
+
+            _print_cli_summary(final_state)
+        else:
+            _print_cli_progress(messages)
+            _print_cli_summary(final_state)
 
     except Exception as exc:
-        print(f"\nError executing agent: {exc}")
+        clean_exc = sanitize_log_output(str(exc))
+        print("\n" + "=" * 50)
+        print("FAILED")
+        print("=" * 50)
+        print(f"\nReason:\nError executing agent: {clean_exc}")
         sys.exit(1)
 
 
