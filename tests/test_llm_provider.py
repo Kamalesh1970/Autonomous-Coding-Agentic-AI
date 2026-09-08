@@ -424,3 +424,79 @@ def test_mocked_multi_step_gemini_tool_calling_preserves_thought_signature(monke
 
     assert messages[2].additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_1": "sig_turn_1"}
     assert messages[4].additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_2": "sig_turn_2"}
+
+
+def test_failover_quota_429_with_limit_400_string():
+    """Verify 429 quota error containing 'limit: 400' is correctly classified as retryable and fails over."""
+    k1 = MagicMock()
+    k1.invoke.side_effect = Exception("429 ResourceExhausted: Quota exceeded for metric GenerateContentRequestsPerMinute limit: 400")
+    k2 = MagicMock()
+    k2.invoke.return_value = AIMessage(content="Key 2 Success")
+
+    model = FailoverChatModel(candidates=[k1, k2])
+    res = model.invoke([HumanMessage(content="Test")])
+    assert res.content == "Key 2 Success"
+    assert k1.invoke.call_count == 1
+    assert k2.invoke.call_count == 1
+
+
+def test_full_four_provider_failover_chain():
+    """Verify sequence: Key 1 (429) -> Key 2 (429) -> Key 3 (429) -> OpenRouter (Success)."""
+    k1 = MagicMock()
+    k1.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED key 1")
+    k2 = MagicMock()
+    k2.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED key 2")
+    k3 = MagicMock()
+    k3.invoke.side_effect = Exception("429 RESOURCE_EXHAUSTED key 3")
+    openrouter = MagicMock()
+    openrouter.invoke.return_value = AIMessage(content="OpenRouter Success")
+
+    model = FailoverChatModel(candidates=[k1, k2, k3, openrouter])
+    res = model.invoke([HumanMessage(content="Test")])
+
+    assert res.content == "OpenRouter Success"
+    assert k1.invoke.call_count == 1
+    assert k2.invoke.call_count == 1
+    assert k3.invoke.call_count == 1
+    assert openrouter.invoke.call_count == 1
+
+
+def test_all_four_providers_fail_raises_final_error():
+    """Verify sequence where all 4 providers fail raises the final provider error cleanly."""
+    k1 = MagicMock()
+    k1.invoke.side_effect = Exception("429 key 1")
+    k2 = MagicMock()
+    k2.invoke.side_effect = Exception("429 key 2")
+    k3 = MagicMock()
+    k3.invoke.side_effect = Exception("429 key 3")
+    openrouter = MagicMock()
+    openrouter.invoke.side_effect = Exception("429 openrouter exhausted")
+
+    model = FailoverChatModel(candidates=[k1, k2, k3, openrouter])
+    with pytest.raises(Exception, match="429 openrouter exhausted"):
+        model.invoke([HumanMessage(content="Test")])
+
+    assert k1.invoke.call_count == 1
+    assert k2.invoke.call_count == 1
+    assert k3.invoke.call_count == 1
+    assert openrouter.invoke.call_count == 1
+
+
+def test_failover_stops_immediately_on_mid_chain_success():
+    """Verify failover stops immediately when a mid-chain provider succeeds (fail fast on success)."""
+    k1 = MagicMock()
+    k1.invoke.side_effect = Exception("429 key 1")
+    k2 = MagicMock()
+    k2.invoke.return_value = AIMessage(content="Key 2 Success")
+    k3 = MagicMock()
+    openrouter = MagicMock()
+
+    model = FailoverChatModel(candidates=[k1, k2, k3, openrouter])
+    res = model.invoke([HumanMessage(content="Test")])
+
+    assert res.content == "Key 2 Success"
+    assert k1.invoke.call_count == 1
+    assert k2.invoke.call_count == 1
+    assert k3.invoke.call_count == 0
+    assert openrouter.invoke.call_count == 0
+

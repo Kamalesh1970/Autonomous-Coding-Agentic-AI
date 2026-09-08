@@ -60,6 +60,14 @@ def test_git_current_branch(tmp_path: Path):
     assert branch in ("master", "main")
 
 
+def test_git_status_non_git_workspace_handled_gracefully(tmp_path: Path):
+    """Verify git status operations on a non-git directory return informative messages without crashing."""
+    (tmp_path / "hello.py").write_text("print('hello')\n")
+    res = _git_status_impl(workspace_root=str(tmp_path))
+    assert "Git Error:" in res or "not a git repository" in res.lower()
+
+
+
 # -----------------------------------------------------------------------------
 # 2. Safe Branch Creation Tests
 # -----------------------------------------------------------------------------
@@ -623,4 +631,55 @@ def test_plan_approval_enabled_plan_pending_escalated(tmp_path: Path, monkeypatc
         f"Expected ESCALATED, got {report.get('final_outcome')}"
     )
     assert report.get("task_success") is False
+
+
+def test_plan_approval_enabled_plan_rejected(tmp_path: Path, monkeypatch):
+    """With REQUIRE_PLAN_APPROVAL=true, rejecting the plan sets plan_approval_status='rejected'
+    and keeps task paused with no file edits performed."""
+    monkeypatch.setenv("REQUIRE_PLAN_APPROVAL", "true")
+    init_git_repo(tmp_path)
+    (tmp_path / "calc.py").write_text("def add(a, b):\n    return a + b\n")
+
+    task_id = "plan_approval_rejected_test"
+    storage_dir = tmp_path / "mem"
+
+    step1_responses = [
+        AIMessage(
+            content="Creating plan.",
+            tool_calls=[{
+                "name": "create_plan",
+                "args": {
+                    "tasks": [{"id": "t1", "title": "Fix calc", "dependencies": []}]
+                },
+                "id": "pa6",
+            }],
+        ),
+        AIMessage(content="Plan ready, awaiting human approval."),
+    ]
+    mock_llm_step1 = MockLLM(responses=step1_responses)
+
+    state1 = run_agent(
+        goal="Verify calc.py",
+        workspace_root=str(tmp_path),
+        llm=mock_llm_step1,
+        task_id=task_id,
+        storage_dir=str(storage_dir),
+    )
+
+    assert state1.get("plan_approval_required") is True
+    assert state1.get("plan_approval_status") == "pending"
+
+    # Human rejects the plan
+    state2 = approve_task(
+        task_id=task_id,
+        decision="rejected",
+        notes="Plan rejected by user.",
+        workspace_root=str(tmp_path),
+        storage_dir=str(storage_dir),
+    )
+
+    assert state2.get("plan_approval_status") == "rejected"
+    assert state2.get("plan_approval_required") is False
+    assert state2.get("status") == "paused"
+
 

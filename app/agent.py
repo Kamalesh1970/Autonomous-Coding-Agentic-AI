@@ -59,25 +59,29 @@ SYSTEM_PROMPT = (
 def is_retryable_error(error: Exception) -> bool:
     """Classify whether an exception is a retryable provider error."""
     err_str = str(error).lower()
-    
-    # Non-retryable configuration errors
+    err_type = type(error).__name__.lower()
+
+    # Retryable provider errors (quota, rate limits, server errors, auth key failure)
+    retryable_patterns = [
+        "429", "quota", "rate limit", "ratelimit", "resource_exhausted", "resourceexhausted",
+        "500", "502", "503", "504", "unavailable", "overloaded",
+        "invalid_api_key", "unauthorized", "401", "403"
+    ]
+    for pattern in retryable_patterns:
+        if pattern in err_str or pattern in err_type:
+            return True
+
+    # Non-retryable configuration / schema errors
     non_retryable_patterns = [
         "404", "not_found", "no longer available", "invalid model",
-        "400", "invalid_argument", "malformed request", "thought_signature"
+        "invalid_argument", "malformed request", "thought_signature"
     ]
     for pattern in non_retryable_patterns:
         if pattern in err_str:
             return False
 
-    # Retryable provider errors
-    retryable_patterns = [
-        "429", "quota", "rate limit", "resource_exhausted",
-        "500", "502", "503", "504", "unavailable",
-        "invalid_api_key", "unauthorized", "401", "403", "key"
-    ]
-    for pattern in retryable_patterns:
-        if pattern in err_str:
-            return True
+    if "400" in err_str and ("bad request" in err_str or "status" in err_str or "invalid" in err_str):
+        return False
 
     return False
 
@@ -428,6 +432,20 @@ def sync_plan_from_messages(state: AgentState) -> AgentState:
             elif "Successfully committed changes" in content:
                 commit_created = True
 
+    if plan and isinstance(plan, dict) and "tasks" in plan and plan["tasks"]:
+        completed_indices = [
+            idx for idx, t in enumerate(plan["tasks"]) if t.get("status") == "completed"
+        ]
+        if completed_indices:
+            max_completed_idx = max(completed_indices)
+            for idx in range(max_completed_idx):
+                if plan["tasks"][idx].get("status") in ("pending", "in_progress"):
+                    plan["tasks"][idx]["status"] = "completed"
+
+        if verification_result and verification_result.get("status") == "passed":
+            for t in plan["tasks"]:
+                t["status"] = "completed"
+
     retry_count = max(existing_retry_count, failed_tool_messages)
 
     updated_state = dict(state)
@@ -505,20 +523,7 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
         else:
             input_messages.extend(messages)
 
-        import json
-        print("=== MESSAGE DUMP BEFORE FAILING CALL ===")
-        for i, m in enumerate(input_messages):
-            print(f"--- message {i}: {type(m).__name__} ---")
-            print("content:", repr(getattr(m, "content", None))[:200])
-            print("tool_calls:", getattr(m, "tool_calls", None))
-            print("additional_kwargs:", getattr(m, "additional_kwargs", None))
-            print("response_metadata:", getattr(m, "response_metadata", None))
-        print("=== END DUMP ===")
-
         response = llm_with_tools.invoke(input_messages)
-        if isinstance(response, AIMessage):
-            sig_produced = getattr(response, "additional_kwargs", {}).get("__gemini_function_call_thought_signatures__")
-            print(f"[PRODUCED AIMessage] additional_kwargs thought signatures: {sig_produced}")
 
         res_dict = {"messages": [response]}
         if state.get("plan"):
@@ -556,8 +561,16 @@ def build_agent_graph(llm: BaseChatModel | None = None, workspace_root: str = ".
         if not messages:
             return END
 
+        require_plan_approval = os.getenv("REQUIRE_PLAN_APPROVAL", "false").strip().lower() in ("true", "1", "yes")
         last_message = messages[-1]
         if isinstance(last_message, AIMessage) and getattr(last_message, "tool_calls", None):
+            if require_plan_approval:
+                plan = state.get("plan")
+                plan_st = state.get("plan_approval_status", "not_required")
+                if plan and plan_st not in ("approved",):
+                    for tc in last_message.tool_calls:
+                        if tc.get("name") in ("write_file", "replace_in_file"):
+                            return END
             return "tools"
 
         return END
@@ -695,6 +708,8 @@ def run_agent(
             synced_state["plan_approval_required"] = True
             synced_state["plan_approval_status"] = "pending"
             synced_state["plan_content"] = plan_text
+            if not synced_state.get("approval_reason"):
+                synced_state["approval_reason"] = "plan pending approval"
             plan_app_req = True
             plan_app_st = "pending"
 

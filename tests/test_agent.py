@@ -1137,3 +1137,56 @@ def test_end_to_end_resume_workflow(tmp_path: Path):
     assert ver_res["status"] == "passed"
 
 
+def test_all_tasks_completed_on_successful_run(tmp_path: Path):
+    """Verify that after a successful run with goal verification passed, all tasks in the final plan state are COMPLETED."""
+    init_git_repo(tmp_path)
+    (tmp_path / "lib.py").write_text("def sub(a, b): return a - b\n")
+
+    responses = [
+        AIMessage(
+            content="Creating plan.",
+            tool_calls=[{
+                "name": "create_plan",
+                "args": {
+                    "tasks": [
+                        {"id": "t1", "title": "Inspect code", "dependencies": []},
+                        {"id": "t2", "title": "Fix bug", "dependencies": ["t1"]},
+                        {"id": "t3", "title": "Verify goal", "dependencies": ["t2"]},
+                    ]
+                },
+                "id": "c1",
+            }],
+        ),
+        AIMessage(
+            content="Goal verified.",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {
+                    "status": "passed",
+                    "summary": "lib.py verified",
+                    "evidence": ["sub returns a-b"],
+                },
+                "id": "c2",
+            }],
+        ),
+        AIMessage(content="All done."),
+    ]
+    mock_llm = MockLLM(responses=responses)
+
+    state = run_agent(
+        goal="Fix lib.py",
+        workspace_root=str(tmp_path),
+        llm=mock_llm,
+        task_id="auto_complete_tasks_test",
+        storage_dir=str(tmp_path / "mem"),
+    )
+
+    plan = state.get("plan")
+    assert plan is not None
+    tasks = plan.get("tasks", [])
+    assert len(tasks) == 3
+    for t in tasks:
+        assert t.get("status") == "completed", f"Task {t.get('id')} status is {t.get('status')}, expected completed"
+
+
+
