@@ -337,4 +337,88 @@ def test_multi_turn_tool_calling_sequence_preserves_thought_signature_in_persist
     assert payload_messages[3]["tool_calls"][0].get("thought_signature") == "sig_turn_2_xyz"
 
 
+def test_first_gemini_invocation_with_tools_bound(monkeypatch):
+    """Regression test: verify the FIRST Gemini invocation with tools bound executes cleanly without errors (mocked)."""
+    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+    from app.agent import get_default_llm, SYSTEM_PROMPT
+    from app.tools import create_workspace_tools
+    from unittest.mock import patch, MagicMock
+
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY_1", "mock-gemini-key-1")
+
+    llm = get_default_llm()
+    tools = create_workspace_tools()
+    llm_with_tools = llm.bind_tools(tools)
+
+    mock_ai_message = AIMessage(
+        content="",
+        tool_calls=[{"name": "read_file", "args": {"file_path": "calculator.py"}, "id": "call_mock_1"}],
+        additional_kwargs={"__gemini_function_call_thought_signatures__": {"call_mock_1": "mock_thought_sig_1"}}
+    )
+
+    input_messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content="Fix all failing tests"),
+    ]
+
+    target = llm_with_tools.candidates[0] if hasattr(llm_with_tools, "candidates") else llm_with_tools
+    with patch.object(target, "invoke", return_value=mock_ai_message):
+        response = llm_with_tools.invoke(input_messages)
+
+    assert isinstance(response, AIMessage)
+    assert len(response.tool_calls) == 1
+    assert response.tool_calls[0]["name"] == "read_file"
+    assert response.additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_mock_1": "mock_thought_sig_1"}
+
+
+def test_mocked_multi_step_gemini_tool_calling_preserves_thought_signature(monkeypatch):
+    """Regression test: verify mocked MULTI-STEP Gemini tool calling preserves thought signatures across turns."""
+    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+    from app.agent import get_default_llm, SYSTEM_PROMPT
+    from app.tools import create_workspace_tools
+    from unittest.mock import patch, MagicMock
+
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY_1", "mock-gemini-key-1")
+
+    llm = get_default_llm()
+    tools = create_workspace_tools()
+    llm_with_tools = llm.bind_tools(tools)
+
+    turn_1_ai = AIMessage(
+        content="",
+        tool_calls=[{"name": "read_file", "args": {"file_path": "calculator.py"}, "id": "call_1"}],
+        additional_kwargs={"__gemini_function_call_thought_signatures__": {"call_1": "sig_turn_1"}}
+    )
+    turn_2_ai = AIMessage(
+        content="",
+        tool_calls=[{"name": "run_tests", "args": {}, "id": "call_2"}],
+        additional_kwargs={"__gemini_function_call_thought_signatures__": {"call_2": "sig_turn_2"}}
+    )
+
+    mock_invoke = MagicMock(side_effect=[turn_1_ai, turn_2_ai])
+
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content="Fix all failing tests"),
+    ]
+
+    target = llm_with_tools.candidates[0] if hasattr(llm_with_tools, "candidates") else llm_with_tools
+    with patch.object(target, "invoke", mock_invoke):
+        # Turn 1
+        res1 = llm_with_tools.invoke(messages)
+        messages.append(res1)
+        messages.append(ToolMessage(content="def add(a, b): return a + b", tool_call_id="call_1", name="read_file"))
+
+        # Turn 2 (position 2 tool call)
+        res2 = llm_with_tools.invoke(messages)
+        messages.append(res2)
+        messages.append(ToolMessage(content="Status: passed", tool_call_id="call_2", name="run_tests"))
+
+    assert messages[2].additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_1": "sig_turn_1"}
+    assert messages[4].additional_kwargs.get("__gemini_function_call_thought_signatures__") == {"call_2": "sig_turn_2"}
+
+
+
 

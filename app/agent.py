@@ -169,7 +169,7 @@ class FailoverChatModel(BaseChatModel):
             except Exception as e:
                 last_error = e
                 if is_retryable_error(e) and i < len(self.candidates) - 1:
-                    print(f"Provider attempt {i + 1} failed with retryable error; trying next configured option.")
+                    print(f"Provider attempt {i + 1} failed with retryable error ({type(e).__name__}: {e}); trying next configured option.")
                     continue
                 raise e
         if last_error:
@@ -184,7 +184,7 @@ class FailoverChatModel(BaseChatModel):
             except Exception as e:
                 last_error = e
                 if is_retryable_error(e) and i < len(self.candidates) - 1:
-                    print(f"Provider attempt {i + 1} failed with retryable error; trying next configured option.")
+                    print(f"Provider attempt {i + 1} failed with retryable error ({type(e).__name__}: {e}); trying next configured option.")
                     continue
                 raise e
         if last_error:
@@ -230,6 +230,7 @@ def get_default_llm() -> BaseChatModel:
                 ChatGoogleGenerativeAI(
                     model=model_name,
                     google_api_key=k,
+                    max_retries=1,
                     temperature=0,
                 )
             )
