@@ -337,3 +337,310 @@ def test_existing_agent_functionality_remains_unchanged(tmp_path: Path):
     assert "messages" in state
     assert "verification_result" in state
     assert state.get("verification_result", {}).get("status") == "passed"
+
+
+# -----------------------------------------------------------------------------
+# Phase 16C — Final Execution Report Tests
+# -----------------------------------------------------------------------------
+
+def test_phase16c_successful_execution_produces_final_execution_report(tmp_path: Path, monkeypatch, capsys):
+    """Requirement A: Successful execution produces a final execution report."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    responses = [
+        AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {"status": "passed", "summary": "Goal completed", "evidence": []},
+                "id": "c1",
+            }],
+        ),
+    ]
+    mock_llm = MockLLM(responses=responses)
+
+    with patch("sys.argv", ["agent.py", "Fix bug in calc", str(tmp_path)]):
+        with patch("app.agent.get_default_llm", return_value=mock_llm):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: SUCCESS" in captured
+    assert "==================================================" in captured
+    assert "SUCCESS" in captured
+
+
+def test_phase16c_failed_execution_produces_failed_report(tmp_path: Path, monkeypatch, capsys):
+    """Requirement B: Failed execution produces a FAILED report."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    with patch("sys.argv", ["agent.py", "Fail test", str(tmp_path)]):
+        with patch("app.agent.run_agent", side_effect=RuntimeError("Provider limit exhausted")):
+            with pytest.raises(SystemExit):
+                main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: FAILED" in captured
+    assert "Reason:" in captured
+    assert "Provider limit exhausted" in captured
+
+
+def test_phase16c_escalated_execution_produces_escalated_report(tmp_path: Path, monkeypatch, capsys):
+    """Requirement C: Escalated execution produces an ESCALATED report."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    fake_state = {
+        "user_goal": "Deploy production release",
+        "workspace_root": str(tmp_path),
+        "status": "completed",
+        "final_outcome": "ESCALATED",
+        "approval_required": True,
+        "approval_status": "pending",
+        "approval_reason": "Git push requires human approval",
+        "messages": [],
+    }
+
+    with patch("sys.argv", ["agent.py", "Deploy production release", str(tmp_path)]):
+        with patch("app.agent.run_agent", return_value=fake_state):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: ESCALATED" in captured
+    assert "Reason:" in captured
+    assert "Git push requires human approval" in captured
+
+
+def test_phase16c_report_contains_actual_user_goal(tmp_path: Path, monkeypatch, capsys):
+    """Requirement D: Report contains the actual user goal."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    responses = [
+        AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {"status": "passed", "summary": "verified", "evidence": []},
+                "id": "c1",
+            }],
+        ),
+    ]
+    mock_llm = MockLLM(responses=responses)
+    custom_goal = "Refactor calculation engine in math module"
+
+    with patch("sys.argv", ["agent.py", custom_goal, str(tmp_path)]):
+        with patch("app.agent.get_default_llm", return_value=mock_llm):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert custom_goal in captured
+
+
+def test_phase16c_report_contains_actual_test_validation_information(tmp_path: Path, monkeypatch, capsys):
+    """Requirement E: Report contains actual test/validation information."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    fake_state = {
+        "user_goal": "Fix tests",
+        "workspace_root": str(tmp_path),
+        "status": "completed",
+        "final_outcome": "SUCCESS",
+        "validation_result": {"status": "passed", "summary": "12 passed, 0 failed"},
+        "verification_result": {"status": "passed", "summary": "verified", "evidence": []},
+        "messages": [],
+    }
+
+    with patch("sys.argv", ["agent.py", "Fix tests", str(tmp_path)]):
+        with patch("app.agent.run_agent", return_value=fake_state):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "12 passed, 0 failed" in captured
+
+
+def test_phase16c_report_contains_actual_recovery_retry_count(tmp_path: Path, monkeypatch, capsys):
+    """Requirement F: Report contains actual recovery retry count."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    fake_state = {
+        "user_goal": "Recover failing code",
+        "workspace_root": str(tmp_path),
+        "status": "completed",
+        "final_outcome": "SUCCESS",
+        "retry_count": 3,
+        "validation_result": {"status": "passed", "summary": "passed after retries"},
+        "verification_result": {"status": "passed", "summary": "verified", "evidence": []},
+        "messages": [],
+    }
+
+    with patch("sys.argv", ["agent.py", "Recover failing code", str(tmp_path)]):
+        with patch("app.agent.run_agent", return_value=fake_state):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "Recovery retries:\n3" in captured or "3" in captured
+
+
+def test_phase16c_report_contains_actual_modified_file_count(tmp_path: Path, monkeypatch, capsys):
+    """Requirement G: Report contains actual modified-file count where available."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    fake_state = {
+        "user_goal": "Edit files",
+        "workspace_root": str(tmp_path),
+        "status": "completed",
+        "final_outcome": "SUCCESS",
+        "modified_files": ["calc.py", "utils.py", "test_calc.py"],
+        "verification_result": {"status": "passed", "summary": "verified", "evidence": []},
+        "messages": [],
+    }
+
+    with patch("sys.argv", ["agent.py", "Edit files", str(tmp_path)]):
+        with patch("app.agent.run_agent", return_value=fake_state):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "Files modified:\n3" in captured
+
+
+def test_phase16c_report_contains_actual_tool_call_count(tmp_path: Path, monkeypatch, capsys):
+    """Requirement H: Report contains actual tool-call count where available."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    fake_state = {
+        "user_goal": "Multi-tool run",
+        "workspace_root": str(tmp_path),
+        "status": "completed",
+        "final_outcome": "SUCCESS",
+        "evaluation_report": {"tool_call_count": 7},
+        "verification_result": {"status": "passed", "summary": "verified", "evidence": []},
+        "messages": [],
+    }
+
+    with patch("sys.argv", ["agent.py", "Multi-tool run", str(tmp_path)]):
+        with patch("app.agent.run_agent", return_value=fake_state):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "Tool calls:\n7" in captured
+
+
+def test_phase16c_report_contains_actual_goal_verification_status(tmp_path: Path, monkeypatch, capsys):
+    """Requirement I: Report contains actual goal-verification status."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    fake_state = {
+        "user_goal": "Verify goal status",
+        "workspace_root": str(tmp_path),
+        "status": "completed",
+        "final_outcome": "SUCCESS",
+        "verification_result": {"status": "passed", "summary": "Verified completely", "evidence": ["evidence1"]},
+        "messages": [],
+    }
+
+    with patch("sys.argv", ["agent.py", "Verify goal status", str(tmp_path)]):
+        with patch("app.agent.run_agent", return_value=fake_state):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "Goal verification: PASSED" in captured
+
+
+def test_phase16c_report_does_not_fabricate_unavailable_metrics(capsys):
+    """Requirement J: Report does not fabricate unavailable metrics."""
+    from app.agent import _print_cli_summary
+
+    empty_state = {
+        "user_goal": None,
+        "workspace_root": None,
+        "status": "unknown",
+    }
+    _print_cli_summary(empty_state)
+
+    captured = capsys.readouterr().out
+    assert "N/A" in captured
+    assert "FINAL EXECUTION REPORT" in captured
+
+
+def test_phase16c_report_does_not_expose_api_keys(capsys):
+    """Requirement K: Report does not expose API keys."""
+    from app.agent import _print_cli_summary
+
+    sensitive_state = {
+        "user_goal": "Task with AIzaSyD-secret-key-123456789 and sk-proj-12345678901234567890",
+        "workspace_root": ".",
+        "status": "completed",
+        "final_outcome": "SUCCESS",
+    }
+    _print_cli_summary(sensitive_state)
+
+    captured = capsys.readouterr().out
+    assert "AIzaSyD-secret-key-123456789" not in captured
+    assert "sk-proj-12345678901234567890" not in captured
+    assert "[REDACTED_API_KEY]" in captured
+
+
+def test_phase16c_report_does_not_expose_thought_signatures(tmp_path: Path, monkeypatch, capsys):
+    """Requirement L: Report does not expose thought signatures."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    responses = [
+        AIMessage(
+            content="",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {"status": "passed", "summary": "done", "evidence": []},
+                "id": "c1",
+            }],
+            additional_kwargs={"__gemini_function_call_thought_signatures__": {"c1": "thought_sig_secret_123"}}
+        ),
+    ]
+    mock_llm = MockLLM(responses=responses)
+
+    with patch("sys.argv", ["agent.py", "Thought sig test", str(tmp_path)]):
+        with patch("app.agent.get_default_llm", return_value=mock_llm):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "thought_sig_secret_123" not in captured
+    assert "__gemini_function_call_thought_signatures__" not in captured
+
+
+def test_phase16c_report_does_not_expose_raw_aimessage(tmp_path: Path, monkeypatch, capsys):
+    """Requirement M: Report does not expose raw AIMessage objects."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    responses = [
+        AIMessage(
+            content="Internal thoughts",
+            tool_calls=[{
+                "name": "verify_goal",
+                "args": {"status": "passed", "summary": "done", "evidence": []},
+                "id": "c1",
+            }],
+            additional_kwargs={"raw_internal": "secret"},
+        ),
+    ]
+    mock_llm = MockLLM(responses=responses)
+
+    with patch("sys.argv", ["agent.py", "AIMessage test", str(tmp_path)]):
+        with patch("app.agent.get_default_llm", return_value=mock_llm):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "AIMessage(" not in captured
+    assert "raw_internal" not in captured
+

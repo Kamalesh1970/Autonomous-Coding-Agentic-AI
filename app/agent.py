@@ -157,8 +157,10 @@ def sanitize_log_output(text: str) -> str:
         return ""
     import re
     text = re.sub(r"AIzaSy[A-Za-z0-9_-]{10,}", "[REDACTED_API_KEY]", text)
-    text = re.sub(r"sk-(proj-)?[A-Za-z0-9_-]{15,}", "[REDACTED_API_KEY]", text)
+    text = re.sub(r"sk-[A-Za-z0-9_-]{15,}", "[REDACTED_API_KEY]", text)
+    text = re.sub(r"ghp_[A-Za-z0-9_-]{15,}", "[REDACTED_API_KEY]", text)
     return text
+
 
 
 class FailoverChatModel(BaseChatModel):
@@ -936,67 +938,170 @@ def _print_cli_progress(messages: list, final_state: dict | None = None) -> None
         print(f"[{step_num}] Processing task")
 
 
-def _print_cli_summary(final_state: dict) -> None:
-    """Prints clean final result block based on actual state and metrics."""
+def _print_cli_summary(final_state: dict, start_time: float | None = None, exec_time: float | None = None) -> None:
+    """Prints clean final execution report and result banner based on actual state and metrics."""
+    import time
     exec_status = final_state.get("status", "completed")
     val_result = final_state.get("validation_result") or {}
     ver_result = final_state.get("verification_result") or {}
     report = final_state.get("evaluation_report") or {}
-    outcome = final_state.get("final_outcome") or report.get("final_outcome") or "SUCCESS"
-    modified_files = final_state.get("modified_files") or []
-    retry_count = final_state.get("retry_count", 0)
+    messages = final_state.get("messages") or []
 
-    val_status = val_result.get("status") if isinstance(val_result, dict) else None
-    ver_status_val = ver_result.get("status") if isinstance(ver_result, dict) else None
+    # Determine final outcome (SUCCESS, FAILED, ESCALATED)
+    outcome = final_state.get("final_outcome") or report.get("final_outcome")
 
-    # Handle ESCALATED status
+    plan_app_req = bool(final_state.get("plan_approval_required", False))
+    plan_app_st = final_state.get("plan_approval_status", "not_required")
+    app_req = bool(final_state.get("approval_required", False))
+    app_st = final_state.get("approval_status", "not_required")
+
     if (
-        outcome == "ESCALATED"
-        or final_state.get("plan_approval_required")
-        or (final_state.get("approval_required") and final_state.get("approval_status") == "pending")
+        (plan_app_req and plan_app_st == "pending")
+        or (app_req and app_st == "pending")
+        or final_state.get("review_status") == "blocked"
+        or exec_status == "blocked"
+        or outcome == "ESCALATED"
     ):
-        reason = (
-            final_state.get("approval_reason")
-            or ("plan pending approval" if final_state.get("plan_approval_required") else "Git delivery approval pending")
-        )
-        print("\n" + "=" * 50)
-        print("ESCALATED")
-        print("=" * 50)
-        print(f"\nReason:\n{reason}")
-        return
+        outcome = "ESCALATED"
 
-    is_success = (
-        outcome == "SUCCESS"
-        or (exec_status == "completed" and ver_status_val in ("passed", None) and val_status in ("passed", None))
-    ) and outcome not in ("ESCALATED", "FAILED")
+    if not outcome:
+        val_status = val_result.get("status") if isinstance(val_result, dict) else None
+        ver_status_val = ver_result.get("status") if isinstance(ver_result, dict) else None
+        if ver_status_val == "passed" or (exec_status == "completed" and val_status in ("passed", None) and ver_status_val in ("passed", None)):
+            outcome = "SUCCESS"
+        else:
+            outcome = "FAILED"
 
-    if is_success:
-        test_summary = val_result.get("summary") if isinstance(val_result, dict) and val_result.get("summary") else "All tests passed successfully."
-        ver_display = ver_status_val.upper() if ver_status_val else "PASSED"
+    # Goal and Workspace
+    raw_goal = final_state.get("user_goal") or report.get("user_goal")
+    goal = sanitize_log_output(str(raw_goal)) if raw_goal else "N/A"
 
-        print("\n" + "=" * 50)
-        print("SUCCESS")
-        print("=" * 50)
-        print(f"\nTests: {test_summary}")
-        print(f"Files modified: {len(modified_files)}")
-        print(f"Recovery retries: {retry_count}")
-        print(f"Goal verification: {ver_display}")
+    raw_ws = final_state.get("workspace_root") or report.get("workspace_root")
+    workspace = sanitize_log_output(str(os.path.abspath(raw_ws))) if raw_ws else "N/A"
+
+    # Tests summary
+    if isinstance(val_result, dict) and val_result.get("summary"):
+        test_summary = sanitize_log_output(str(val_result.get("summary")))
+    elif report.get("validation_attempts", 0) > 0:
+        passes = report.get("validation_passes", 0)
+        test_summary = f"{passes} passed" if passes > 0 else "0 passed"
     else:
+        test_summary = "N/A"
+
+    # Files modified
+    if "modified_files" in final_state and final_state["modified_files"] is not None:
+        files_modified = str(len(final_state["modified_files"]))
+    elif "modified_files" in report and report["modified_files"] is not None:
+        files_modified = str(len(report["modified_files"]))
+    else:
+        files_modified = "N/A"
+
+    # Tool calls
+    if report.get("tool_call_count") is not None:
+        tool_calls = str(report["tool_call_count"])
+    elif messages:
+        tc_cnt = sum(len(getattr(m, "tool_calls", None) or []) for m in messages)
+        tool_calls = str(tc_cnt)
+    else:
+        tool_calls = "N/A"
+
+    # Validation attempts
+    if report.get("validation_attempts") is not None:
+        val_attempts = str(report["validation_attempts"])
+    elif messages:
+        v_cnt = 0
+        for m in messages:
+            tcs = getattr(m, "tool_calls", None) or []
+            for tc in tcs:
+                if tc.get("name") == "run_tests":
+                    v_cnt += 1
+        val_attempts = str(v_cnt)
+    else:
+        val_attempts = "N/A"
+
+    # Recovery retries
+    if "retry_count" in final_state and final_state["retry_count"] is not None:
+        recovery_retries = str(final_state["retry_count"])
+    elif report.get("retry_count") is not None:
+        recovery_retries = str(report["retry_count"])
+    else:
+        recovery_retries = "N/A"
+
+    # Goal verification
+    if isinstance(ver_result, dict) and ver_result.get("status"):
+        goal_verification = str(ver_result["status"]).upper()
+    elif outcome == "SUCCESS":
+        goal_verification = "PASSED"
+    elif outcome == "FAILED":
+        goal_verification = "FAILED"
+    else:
+        goal_verification = "N/A"
+
+    # Human interventions
+    if report.get("human_interventions") is not None:
+        human_interventions = str(report["human_interventions"])
+    elif messages:
+        h_cnt = 0
+        for m in messages:
+            tcs = getattr(m, "tool_calls", None) or []
+            for tc in tcs:
+                if tc.get("name") == "request_human_approval":
+                    h_cnt += 1
+        human_interventions = str(h_cnt)
+    else:
+        human_interventions = "N/A"
+
+    # Execution time
+    if exec_time is not None:
+        exec_time_str = f"{exec_time:.1f} seconds"
+    elif report.get("execution_time") is not None and report["execution_time"] > 0:
+        exec_time_str = f"{report['execution_time']:.1f} seconds"
+    elif start_time is not None:
+        elapsed = max(0.0, time.time() - start_time)
+        exec_time_str = f"{elapsed:.1f} seconds"
+    else:
+        exec_time_str = "N/A"
+
+    # Reason for FAILED or ESCALATED
+    reason = None
+    if outcome in ("FAILED", "ESCALATED"):
         reason = (
             final_state.get("approval_reason")
             or (ver_result.get("summary") if isinstance(ver_result, dict) else None)
             or (val_result.get("summary") if isinstance(val_result, dict) else None)
             or report.get("summary")
+            or ("plan pending approval" if plan_app_req else "Git delivery approval pending" if app_req else None)
             or f"Task ended with status '{exec_status}'"
         )
-        print("\n" + "=" * 50)
-        print("FAILED")
-        print("=" * 50)
+        reason = sanitize_log_output(str(reason))
+
+    # Print Final Execution Report
+    print("\n" + "=" * 50)
+    print("FINAL EXECUTION REPORT")
+    print("=" * 50)
+    print(f"\nStatus: {outcome}")
+    print(f"\nGoal:\n{goal}")
+    print(f"\nWorkspace:\n{workspace}")
+    print(f"\nTests:\n{test_summary}")
+    print(f"\nFiles modified:\n{files_modified}")
+    print(f"\nTool calls:\n{tool_calls}")
+    print(f"\nValidation attempts:\n{val_attempts}")
+    print(f"\nRecovery retries:\n{recovery_retries}")
+    print(f"\nGoal verification: {goal_verification}")
+    print(f"\nHuman interventions:\n{human_interventions}")
+    print(f"\nExecution time:\n{exec_time_str}")
+
+    if reason:
         print(f"\nReason:\n{reason}")
+
+    print("\n" + "=" * 50)
+    print(outcome)
+    print("=" * 50)
 
 
 def main():
     """CLI entrypoint for running the agent directly."""
+    import time
     if len(sys.argv) < 2:
         print("Usage: python -m app.agent \"<user_goal>\" [workspace_root]")
         sys.exit(1)
@@ -1004,6 +1109,7 @@ def main():
     goal = sys.argv[1]
     workspace_root = sys.argv[2] if len(sys.argv) > 2 else "."
     log_level = os.getenv("AGENT_LOG_LEVEL", "normal").strip().lower()
+    start_time = time.time()
 
     if log_level == "debug":
         print(f"Goal: {goal}")
@@ -1022,6 +1128,7 @@ def main():
         val_result = final_state.get("validation_result")
         ver_result = final_state.get("verification_result")
         retry_count = final_state.get("retry_count", 0)
+        exec_time = time.time() - start_time
 
         if log_level == "debug":
             print(f"Task ID: {task_id}")
@@ -1087,18 +1194,24 @@ def main():
                     deps = f" (deps: {t.get('dependencies')})" if t.get("dependencies") else ""
                     print(f"  [{t.get('status').upper()}] {t.get('id')}: {t.get('title')}{deps}")
 
-            _print_cli_summary(final_state)
+            _print_cli_summary(final_state, start_time=start_time, exec_time=exec_time)
         else:
             _print_cli_progress(messages)
-            _print_cli_summary(final_state)
+            _print_cli_summary(final_state, start_time=start_time, exec_time=exec_time)
 
     except Exception as exc:
         clean_exc = sanitize_log_output(str(exc))
-        print("\n" + "=" * 50)
-        print("FAILED")
-        print("=" * 50)
-        print(f"\nReason:\nError executing agent: {clean_exc}")
+        exec_time = time.time() - start_time
+        failed_state = {
+            "user_goal": goal,
+            "workspace_root": workspace_root,
+            "status": "failed",
+            "final_outcome": "FAILED",
+            "approval_reason": f"Error executing agent: {clean_exc}",
+        }
+        _print_cli_summary(failed_state, start_time=start_time, exec_time=exec_time)
         sys.exit(1)
+
 
 
 if __name__ == "__main__":
