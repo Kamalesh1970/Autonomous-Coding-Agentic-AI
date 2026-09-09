@@ -187,6 +187,28 @@ class ExecutionSandbox:
 
         return False, f"Command '{cmd[0]}' is not in the execution allowlist."
 
+    def validate_command(self, cmd: Union[str, List[str]]) -> None:
+        """Validate command against sandbox policy, raising SecurityError if disallowed.
+
+        Delegates directly to existing is_command_allowed logic without duplicating rules.
+
+        Args:
+            cmd: Command string or list of command arguments.
+
+        Raises:
+            SecurityError: If the command is disallowed by sandbox policy.
+        """
+        if isinstance(cmd, str):
+            import shlex
+            cmd_list = shlex.split(cmd) if cmd.strip() else []
+        else:
+            cmd_list = cmd
+
+        allowed, reason = self.is_command_allowed(cmd_list)
+        if not allowed:
+            self.log_event("command_rejected", f"Command '{cmd}' rejected: {reason}")
+            raise SecurityError(f"Access denied: Command disallowed by sandbox policy ({reason})")
+
 
     def build_minimal_environment(self, custom_env: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """Construct a minimal execution environment excluding sensitive host keys and credentials.
