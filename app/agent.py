@@ -5,6 +5,10 @@ import sys
 from typing import Any, Literal
 from dotenv import load_dotenv
 
+# Load .env once at module import time so that monkeypatching os.environ in tests
+# is not overridden by a later load_dotenv() call inside get_default_llm().
+load_dotenv()
+
 from langchain_core.messages import (
     HumanMessage,
     AIMessage,
@@ -222,7 +226,6 @@ class FailoverChatModel(BaseChatModel):
 
 def get_default_llm() -> BaseChatModel:
     """Initialize the configured LLM using environment variables based on LLM_PROVIDER with failover support."""
-    load_dotenv()
     raw_provider = os.getenv("LLM_PROVIDER", "openai").strip()
     provider = raw_provider.lower()
 
@@ -1099,6 +1102,37 @@ def _print_cli_summary(final_state: dict, start_time: float | None = None, exec_
     print("=" * 50)
 
 
+def _validate_workspace(workspace_root: str) -> None:
+    """Validate workspace_root before agent execution starts.
+
+    Raises:
+        ValueError: With a clean, user-facing message if the workspace is invalid.
+    """
+    import pathlib
+    ws = pathlib.Path(workspace_root)
+    abs_ws = ws.resolve()
+
+    if not abs_ws.exists():
+        raise ValueError(
+            f"Workspace directory does not exist: '{abs_ws}'. "
+            "Please provide a valid, existing directory path."
+        )
+
+    if not abs_ws.is_dir():
+        raise ValueError(
+            f"Workspace path is not a directory: '{abs_ws}'. "
+            "Please provide a directory, not a file."
+        )
+
+    try:
+        list(abs_ws.iterdir())
+    except PermissionError:
+        raise ValueError(
+            f"Workspace directory is not readable: '{abs_ws}'. "
+            "Please check directory permissions."
+        )
+
+
 def main():
     """CLI entrypoint for running the agent directly."""
     import time
@@ -1117,6 +1151,21 @@ def main():
         print("-" * 50)
     else:
         _print_cli_header(goal=goal, workspace_root=workspace_root)
+
+    # Validate workspace before attempting any provider initialization or agent execution
+    try:
+        _validate_workspace(workspace_root)
+    except ValueError as ws_err:
+        exec_time = time.time() - start_time
+        failed_state = {
+            "user_goal": goal,
+            "workspace_root": workspace_root,
+            "status": "failed",
+            "final_outcome": "FAILED",
+            "approval_reason": f"Invalid workspace: {ws_err}",
+        }
+        _print_cli_summary(failed_state, start_time=start_time, exec_time=exec_time)
+        sys.exit(1)
 
     try:
         final_state = run_agent(goal=goal, workspace_root=workspace_root)

@@ -644,3 +644,185 @@ def test_phase16c_report_does_not_expose_raw_aimessage(tmp_path: Path, monkeypat
     assert "AIMessage(" not in captured
     assert "raw_internal" not in captured
 
+
+# -----------------------------------------------------------------------------
+# Phase 16E — Production Configuration & Error Handling Tests
+# -----------------------------------------------------------------------------
+
+def test_phase16e_nonexistent_workspace_produces_failed_report(tmp_path: Path, monkeypatch, capsys):
+    """Requirement A: Non-existent workspace produces a FAILED report without traceback."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    nonexistent = str(tmp_path / "does_not_exist" / "workspace")
+
+    with patch("sys.argv", ["agent.py", "Fix something", nonexistent]):
+        with pytest.raises(SystemExit):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: FAILED" in captured
+    assert "FAILED" in captured
+    # Must not expose raw Python traceback
+    assert "Traceback" not in captured
+    assert "does not exist" in captured or "Invalid workspace" in captured
+
+
+def test_phase16e_file_instead_of_directory_produces_failed_report(tmp_path: Path, monkeypatch, capsys):
+    """Requirement B: Providing a file path as workspace produces a FAILED report."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    file_path = tmp_path / "notadir.py"
+    file_path.write_text("x = 1\n")
+
+    with patch("sys.argv", ["agent.py", "Fix something", str(file_path)]):
+        with pytest.raises(SystemExit):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: FAILED" in captured
+    assert "Traceback" not in captured
+    assert "not a directory" in captured or "Invalid workspace" in captured
+
+
+def test_phase16e_workspace_error_report_contains_user_goal(tmp_path: Path, monkeypatch, capsys):
+    """Requirement C: Workspace error report still contains the user's original goal."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    nonexistent = str(tmp_path / "missing_workspace")
+    custom_goal = "Deploy the production feature branch"
+
+    with patch("sys.argv", ["agent.py", custom_goal, nonexistent]):
+        with pytest.raises(SystemExit):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert custom_goal in captured
+
+
+def test_phase16e_workspace_error_does_not_expose_api_keys(tmp_path: Path, monkeypatch, capsys):
+    """Requirement D: Workspace validation error output does not expose API keys."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    monkeypatch.setenv("GEMINI_API_KEY_1", "AIzaSyD-secret-key-789012345678901234567")
+    nonexistent = str(tmp_path / "no_such_workspace")
+
+    with patch("sys.argv", ["agent.py", "Test goal", nonexistent]):
+        with pytest.raises(SystemExit):
+            main()
+
+    captured = capsys.readouterr().out
+    assert "AIzaSyD-secret-key-789012345678901234567" not in captured
+    assert "FINAL EXECUTION REPORT" in captured
+
+
+def test_phase16e_provider_configuration_error_displays_clean_message(tmp_path: Path, monkeypatch, capsys):
+    """Requirement E: Missing provider API key displays a clean FAILED report with readable error message."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    with patch("sys.argv", ["agent.py", "Fix tests", str(tmp_path)]):
+        with patch("app.agent.run_agent", side_effect=ValueError("OPENAI_API_KEY is required when LLM_PROVIDER=openai")):
+            with pytest.raises(SystemExit):
+                main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: FAILED" in captured
+    assert "Reason:" in captured
+    assert "Traceback" not in captured
+
+
+def test_phase16e_unsupported_provider_error_displays_clean_message(tmp_path: Path, monkeypatch, capsys):
+    """Requirement F: Unsupported LLM_PROVIDER value displays a clean FAILED report."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    with patch("sys.argv", ["agent.py", "Fix tests", str(tmp_path)]):
+        with patch("app.agent.run_agent", side_effect=ValueError("Unsupported LLM provider: badprovider")):
+            with pytest.raises(SystemExit):
+                main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: FAILED" in captured
+    assert "Traceback" not in captured
+
+
+def test_phase16e_tool_execution_exception_displays_clean_report(tmp_path: Path, monkeypatch, capsys):
+    """Requirement G: Unexpected runtime exception during agent execution shows FAILED report, not raw traceback."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    with patch("sys.argv", ["agent.py", "Crash test", str(tmp_path)]):
+        with patch("app.agent.run_agent", side_effect=RuntimeError("Unexpected internal agent crash")):
+            with pytest.raises(SystemExit):
+                main()
+
+    captured = capsys.readouterr().out
+    assert "FINAL EXECUTION REPORT" in captured
+    assert "Status: FAILED" in captured
+    assert "Reason:" in captured
+    assert "Traceback" not in captured
+    # Raw exception class name should NOT appear in output
+    assert "RuntimeError" not in captured
+
+
+def test_phase16e_provider_error_does_not_expose_api_keys_in_error_message(tmp_path: Path, monkeypatch, capsys):
+    """Requirement H: Provider errors do not leak API key values in the CLI output."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+    secret = "sk-proj-leakme12345678901234567890123456"
+
+    with patch("sys.argv", ["agent.py", "Test goal", str(tmp_path)]):
+        with patch("app.agent.run_agent", side_effect=ValueError(f"Invalid key: {secret}")):
+            with pytest.raises(SystemExit):
+                main()
+
+    captured = capsys.readouterr().out
+    assert secret not in captured
+    assert "[REDACTED_API_KEY]" in captured
+
+
+def test_phase16e_validate_workspace_valid_directory(tmp_path: Path):
+    """Requirement I: _validate_workspace raises no exception for a valid, readable directory."""
+    from app.agent import _validate_workspace
+    # Should not raise any exception
+    _validate_workspace(str(tmp_path))
+
+
+def test_phase16e_validate_workspace_nonexistent_raises_value_error(tmp_path: Path):
+    """Requirement J: _validate_workspace raises ValueError for non-existent paths."""
+    from app.agent import _validate_workspace
+    with pytest.raises(ValueError, match="does not exist"):
+        _validate_workspace(str(tmp_path / "no_such_directory"))
+
+
+def test_phase16e_validate_workspace_file_raises_value_error(tmp_path: Path):
+    """Requirement K: _validate_workspace raises ValueError when path is a file, not directory."""
+    from app.agent import _validate_workspace
+    file_path = tmp_path / "file.py"
+    file_path.write_text("x = 1\n")
+    with pytest.raises(ValueError, match="not a directory"):
+        _validate_workspace(str(file_path))
+
+
+def test_phase16e_failed_execution_exit_code_nonzero(tmp_path: Path, monkeypatch, capsys):
+    """Requirement L: Failed agent execution exits with non-zero exit code."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    init_git_repo(tmp_path)
+
+    with patch("sys.argv", ["agent.py", "Fail test", str(tmp_path)]):
+        with patch("app.agent.run_agent", side_effect=RuntimeError("Provider exhausted")):
+            with pytest.raises(SystemExit) as exc_info:
+                main()
+            assert exc_info.value.code != 0
+
+
+def test_phase16e_workspace_validation_failure_exit_code_nonzero(tmp_path: Path, monkeypatch, capsys):
+    """Requirement M: Workspace validation failure exits with non-zero exit code."""
+    monkeypatch.setenv("AGENT_LOG_LEVEL", "normal")
+    nonexistent = str(tmp_path / "missing")
+
+    with patch("sys.argv", ["agent.py", "Test goal", nonexistent]):
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+        assert exc_info.value.code != 0

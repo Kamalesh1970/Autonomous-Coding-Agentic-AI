@@ -220,3 +220,42 @@ pytest -v tests/test_demo_scenarios.py
 python -m app.agent "Add divide function to calculator.py" /path/to/target/repo
 ```
 
+---
+
+## 🔧 Configuration Troubleshooting (Phase 16E)
+
+### Common Provider Configuration Errors
+
+| Error Message | Cause | Fix |
+| :--- | :--- | :--- |
+| `GEMINI_API_KEY (or GEMINI_API_KEY_1) is required when LLM_PROVIDER=gemini` | `LLM_PROVIDER=gemini` set but no valid Gemini API key found. | Set `GEMINI_API_KEY_1=<your_key>` in `.env`. |
+| `OPENAI_API_KEY is required when LLM_PROVIDER=openai` | `LLM_PROVIDER=openai` set but key is missing or still the placeholder. | Set `OPENAI_API_KEY=<your_key>` in `.env`. |
+| `OPENROUTER_API_KEY is required when LLM_PROVIDER=openrouter` | `LLM_PROVIDER=openrouter` set but key not configured. | Set `OPENROUTER_API_KEY=<your_key>` in `.env`. |
+| `Unsupported LLM provider: <value>` | `LLM_PROVIDER` has an unrecognised value. | Use one of: `gemini`, `openai`, or `openrouter`. |
+
+### Common Workspace Errors
+
+| Error Message | Cause | Fix |
+| :--- | :--- | :--- |
+| `Workspace directory does not exist` | Provided workspace path does not exist on disk. | Create the directory first or provide an existing path. |
+| `Workspace path is not a directory` | A file path was passed as workspace instead of a directory. | Provide a directory path as the second CLI argument. |
+| `Workspace directory is not readable` | Agent process lacks read permission on the workspace. | Run `chmod +r <workspace>` or fix directory permissions. |
+
+### Log Level (`AGENT_LOG_LEVEL`)
+
+| Value | Behavior |
+| :--- | :--- |
+| `normal` (default) | Human-readable progress steps + final execution report only. |
+| `debug` | Full message metadata trace, tool call trace, modified files, plan state, and detailed validation/verification output. |
+
+```bash
+# Enable debug output
+AGENT_LOG_LEVEL=debug python -m app.agent "Fix failing tests." /path/to/repo
+```
+
+### Credential & Security Safety
+
+- **API keys are never logged.** All output is sanitized — `AIzaSy*`, `sk-*`, and `ghp_*` patterns are always redacted to `[REDACTED_API_KEY]`.
+- **Thought signatures are never logged.** Internal Gemini metadata (`__gemini_function_call_thought_signatures__`) is excluded from all normal-mode output.
+- **Raw `AIMessage` objects are never printed.** Only human-readable summaries derived from message content appear in CLI output.
+- **Subprocess environment isolation.** Test/command subprocesses run in a minimal clean environment that explicitly excludes `OPENAI_API_KEY`, `GEMINI_API_KEY*`, `OPENROUTER_API_KEY`, and other sensitive host variables.

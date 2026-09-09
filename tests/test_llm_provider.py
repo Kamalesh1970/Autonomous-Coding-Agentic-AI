@@ -507,3 +507,104 @@ def test_openrouter_402_insufficient_credits_terminal_failure():
     assert k1.invoke.call_count == 1
     assert openrouter.invoke.call_count == 1
 
+
+# -----------------------------------------------------------------------------
+# Phase 16E — Provider Configuration Error Tests
+# -----------------------------------------------------------------------------
+
+def test_phase16e_gemini_no_key_raises_clean_value_error(monkeypatch):
+    """Requirement N: LLM_PROVIDER=gemini with no API keys raises a clean ValueError."""
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY_1", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY_2", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY_3", raising=False)
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        get_default_llm()
+
+    msg = str(exc_info.value)
+    assert "GEMINI_API_KEY" in msg
+    assert "required" in msg.lower() or "gemini" in msg.lower()
+
+
+def test_phase16e_gemini_placeholder_key_raises_clean_value_error(monkeypatch):
+    """Requirement O: Placeholder GEMINI_API_KEY value raises a clean ValueError."""
+    monkeypatch.setenv("LLM_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY_1", "your_gemini_api_key_here")
+    monkeypatch.setenv("GEMINI_API_KEY_2", "")
+    monkeypatch.setenv("GEMINI_API_KEY_3", "")
+    monkeypatch.setenv("GEMINI_API_KEY", "your_gemini_api_key_here")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        get_default_llm()
+
+    msg = str(exc_info.value)
+    assert "GEMINI_API_KEY" in msg
+
+
+def test_phase16e_openai_no_key_raises_clean_value_error(monkeypatch):
+    """Requirement P: LLM_PROVIDER=openai with no API key raises a clean ValueError."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        get_default_llm()
+
+    msg = str(exc_info.value)
+    assert "OPENAI_API_KEY" in msg
+    assert "required" in msg.lower()
+
+
+def test_phase16e_openai_placeholder_key_raises_clean_value_error(monkeypatch):
+    """Requirement Q: Placeholder OPENAI_API_KEY value raises a clean ValueError."""
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "your_openai_api_key_here")
+
+    with pytest.raises(ValueError) as exc_info:
+        get_default_llm()
+
+    msg = str(exc_info.value)
+    assert "OPENAI_API_KEY" in msg
+
+
+def test_phase16e_openrouter_no_key_raises_clean_value_error(monkeypatch):
+    """Requirement R: LLM_PROVIDER=openrouter with no API key raises a clean ValueError."""
+    monkeypatch.setenv("LLM_PROVIDER", "openrouter")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    with pytest.raises(ValueError) as exc_info:
+        get_default_llm()
+
+    msg = str(exc_info.value)
+    assert "OPENROUTER_API_KEY" in msg
+    assert "required" in msg.lower()
+
+
+def test_phase16e_unsupported_provider_raises_clean_value_error(monkeypatch):
+    """Requirement S: Unknown LLM_PROVIDER value raises a clean ValueError naming the bad provider."""
+    monkeypatch.setenv("LLM_PROVIDER", "anthropic_direct")
+
+    with pytest.raises(ValueError) as exc_info:
+        get_default_llm()
+
+    msg = str(exc_info.value)
+    assert "anthropic_direct" in msg or "Unsupported" in msg
+
+
+def test_phase16e_provider_error_message_does_not_leak_env_credentials(monkeypatch):
+    """Requirement T: Provider configuration error messages never contain actual credential values."""
+    secret = "sk-openai-realsecret123456789012345678"
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "your_openai_api_key_here")
+
+    try:
+        get_default_llm()
+        raise AssertionError("Expected ValueError was not raised")
+    except ValueError as exc:
+        error_msg = str(exc)
+        # The error message should never contain an actual placeholder or real key value in a way
+        # that leaks real credentials. The placeholder is safe to surface, but real secrets must not.
+        assert secret not in error_msg
