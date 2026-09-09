@@ -194,3 +194,29 @@ REQUIRE_PLAN_APPROVAL=true
 > **Note:** Disabling `REQUIRE_PLAN_APPROVAL` (or omitting it entirely) restores the default Phase 15 autonomous behavior — no tests are affected.
 
 ---
+
+## 🎬 Demo Scenarios
+
+The Autonomous Coding Agent includes a deterministic demonstration suite covering 9 core capabilities:
+
+| Demo Scenario | User Goal | Workflow Steps | Expected Outcome | CLI / Test Command |
+| :--- | :--- | :--- | :--- | :--- |
+| **Demo 1 — Simple Success** | `"Add a divide function to calculator.py and make sure the tests pass."` | Plans tasks $\rightarrow$ writes code and test $\rightarrow$ runs tests $\rightarrow$ verifies goal. | `SUCCESS` | `pytest -v tests/test_demo_scenarios.py -k test_demo_1_simple_success` |
+| **Demo 2 — Real Bug Fix** | `"Fix the multiply bug in calculator.py so multiply(4,5) returns 20."` | Initial test fails $\rightarrow$ reads `calculator.py` $\rightarrow$ replaces `+` with `*` $\rightarrow$ tests pass $\rightarrow$ verifies goal. | `SUCCESS` | `pytest -v tests/test_demo_scenarios.py -k test_demo_2_real_bug_fix` |
+| **Demo 3 — Self-Correction** | `"Fix square in math_utils.py"` | First edit fails test $\rightarrow$ observes traceback $\rightarrow$ applies exponent fix `x**2` $\rightarrow$ tests pass (`recovery_retries > 0`). | `SUCCESS` | `pytest -v tests/test_demo_scenarios.py -k test_demo_3_self_correction` |
+| **Demo 4 — Repository Retrieval** | `"Fix the string reversal functionality."` | Hybrid search locates `string_utils.py` $\rightarrow$ edits target file $\rightarrow$ tests pass. | `SUCCESS` | `pytest -v tests/test_demo_scenarios.py -k test_demo_4_repository_understanding_retrieval` |
+| **Demo 5 — Multi-Agent Workflow** | `"Implement main in app.py"` | `Analyzer` scans repo $\rightarrow$ `Coder` writes code $\rightarrow$ `Reviewer` approves change. | `SUCCESS` | `pytest -v tests/test_demo_scenarios.py -k test_demo_5_multi_agent_workflow` |
+| **Demo 6 — Security Rejection** | `"Read system passwd file at ../../etc/passwd"` | Sandbox security policy detects path traversal escape $\rightarrow$ operation rejected. | `FAILED` / Rejection | `pytest -v tests/test_demo_scenarios.py -k test_demo_6_security_sandbox_rejection` |
+| **Demo 7 — Human Approval** | `"Push changes to remote repository"` | Protected delivery action triggers human approval gate $\rightarrow$ execution pauses. | `ESCALATED` | `pytest -v tests/test_demo_scenarios.py -k test_demo_7_human_approval_boundary` |
+| **Demo 8 — Failure / Escalation** | `"Fix add in calc.py"` | Repeated failing edits exhaust max retries (`retry_count >= 3`) $\rightarrow$ execution fails gracefully. | `FAILED` | `pytest -v tests/test_demo_scenarios.py -k test_demo_8_failure_escalation` |
+| **Demo 9 — Final Report** | `"Verify calc.py functionality"` | CLI outputs full Phase 16C report block (Status, Goal, Workspace, Tests, Tool calls, Execution time). | `SUCCESS` | `pytest -v tests/test_demo_scenarios.py -k test_demo_9_final_execution_report` |
+
+### Running the Demo Suite
+```bash
+# Run all demo scenarios
+pytest -v tests/test_demo_scenarios.py
+
+# Run an individual demo scenario CLI execution
+python -m app.agent "Add divide function to calculator.py" /path/to/target/repo
+```
+
