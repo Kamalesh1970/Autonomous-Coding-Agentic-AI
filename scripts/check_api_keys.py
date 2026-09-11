@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Standalone script to check API key status for all configured providers."""
+"""Standalone helper script to check API key status for all configured LLM providers."""
 
 import os
 import sys
-
-# Load .env manually
+import json
 from pathlib import Path
-env_path = Path(__file__).resolve().parent / ".env"
+
+# Load .env manually if present
+env_path = Path(__file__).resolve().parent.parent / ".env"
 if env_path.exists():
     for line in env_path.read_text().splitlines():
         line = line.strip()
@@ -16,7 +17,6 @@ if env_path.exists():
             key, _, val = line.partition("=")
             os.environ.setdefault(key.strip(), val.strip())
 
-import json
 
 def check_gemini_key(key_name: str):
     """Test a single Gemini API key with a minimal request."""
@@ -57,7 +57,6 @@ def check_openrouter_key():
 
     try:
         import httpx
-        # Check credits/limits
         response = httpx.get(
             "https://openrouter.ai/api/v1/auth/key",
             headers={"Authorization": f"Bearer {api_key}"},

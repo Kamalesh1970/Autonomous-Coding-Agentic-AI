@@ -73,6 +73,13 @@ The agent supports multiple LLM providers without architectural changes:
 * **OpenRouter** (`LLM_PROVIDER=openrouter`)
 * **OpenAI** (`LLM_PROVIDER=openai`)
 
+### Intelligent Failover & Retry Classification
+
+- **Automatic Failover Chain**: When `LLM_PROVIDER=gemini`, the system attempts requests in sequence across `GEMINI_API_KEY_1` $\rightarrow$ `GEMINI_API_KEY_2` $\rightarrow$ `GEMINI_API_KEY_3`. If all configured Gemini keys fail with retryable errors, execution automatically falls back to `OPENROUTER_API_KEY`.
+- **Smart Exception Classification**:
+  - **Retryable Errors** (triggers key failover / retry): HTTP `429` (rate limits, quota exhaustion, `resource_exhausted`), HTTP `500`/`502`/`503`/`504` server errors, and `401`/`403` auth key failures.
+  - **Non-Retryable Errors** (fails fast without consuming remaining keys): HTTP `400` malformed request, HTTP `402` payment required/insufficient credits, `404` model not found, or schema errors.
+
 ### Configuration Examples (`.env`)
 
 **Using Gemini (with Automatic Key Failover & OpenRouter Fallback):**
@@ -102,6 +109,7 @@ LLM_MODEL=gpt-4o-mini
 ```
 
 ---
+
 
 ## 🛠️ CLI Usage
 
@@ -259,3 +267,39 @@ AGENT_LOG_LEVEL=debug python -m app.agent "Fix failing tests." /path/to/repo
 - **Thought signatures are never logged.** Internal Gemini metadata (`__gemini_function_call_thought_signatures__`) is excluded from all normal-mode output.
 - **Raw `AIMessage` objects are never printed.** Only human-readable summaries derived from message content appear in CLI output.
 - **Subprocess environment isolation.** Test/command subprocesses run in a minimal clean environment that explicitly excludes `OPENAI_API_KEY`, `GEMINI_API_KEY*`, `OPENROUTER_API_KEY`, and other sensitive host variables.
+
+---
+
+## 🐳 Docker Deployment (Phase 16J)
+
+The Autonomous Coding Agent and Web Dashboard are containerized using a production-oriented, non-root Docker architecture.
+
+### Build Image
+```bash
+docker build -t autonomous-coding-agent:latest .
+```
+
+### Run Container
+```bash
+docker run -d \
+  --name coding-agent \
+  -p 8000:8000 \
+  -e LLM_PROVIDER=gemini \
+  -e GEMINI_API_KEY_1=your_gemini_api_key_here \
+  autonomous-coding-agent:latest
+```
+
+### Check Health & Access Dashboard
+- **Healthcheck**: `curl http://localhost:8000/health` (Returns `{"status": "ok", "service": "autonomous-coding-agent"}`)
+- **Web Dashboard**: `http://localhost:8000`
+
+---
+
+## 🛠️ Recent Fixes & Engineering Rigor
+
+The codebase has undergone key hardening and reliability enhancements:
+
+1. **Gemini `thought_signature` Multi-Turn Tool-Calling Fix**: Implemented custom `GeminiChatOpenAI` wrapper and state serializer preserving Google Gemini internal thought signatures across multi-turn tool calling, preventing `thought_signature` schema errors during iterative reasoning.
+2. **Intelligent Failover & Retry Classification**: Refined `is_retryable_error()` classification to distinguish retryable quota/rate-limit errors (`429`, `500`s, auth failover) from non-retryable configuration/billing errors (`400`, `402`, `404`), enabling smooth failover across `GEMINI_API_KEY_1` $\rightarrow$ `2` $\rightarrow$ `3` $\rightarrow$ OpenRouter.
+3. **Real-Time Task State & Plan Synchronization**: Fixed task auto-completion and plan state sync (`sync_plan_from_messages`) so `modified_files`, `validation_result`, and `verification_result` update cleanly in `.agent_memory/`.
+4. **Web API Error Message Specificity & Security**: Enhanced FastAPI exception handling in `app/web.py` to differentiate execution timeouts (`TimeoutError` returning `"Agent execution timed out"`) from general task failures (`"Agent execution failed"`), while sanitizing credentials and enforcing system directory workspace boundary protections (`/etc`, `/proc`, `/sys`).

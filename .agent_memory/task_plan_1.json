@@ -2,7 +2,7 @@
   "version": "1.0",
   "task_id": "task_plan_1",
   "user_goal": "Task Plan",
-  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-5/test_plan_survives_resume0",
+  "workspace_root": "/tmp/pytest-of-kamalesh/pytest-8/test_plan_survives_resume0",
   "status": "running",
   "plan": {
     "goal": "Task Plan",
@@ -58,7 +58,7 @@
   "max_multi_agent_iterations": 3,
   "execution_trace": [
     {
-      "timestamp": 1789106826.302,
+      "timestamp": 1789108031.915,
       "event_type": "agent_start",
       "agent_role": "single_agent",
       "tool_name": null,
@@ -73,7 +73,7 @@
     {
       "type": "HumanMessage",
       "content": "Task Plan",
-      "id": "7088823f-78d7-4edb-b5dd-e44880dc32af"
+      "id": "9110ce0e-d94f-4496-a925-50e20666c4ca"
     }
   ]
 }

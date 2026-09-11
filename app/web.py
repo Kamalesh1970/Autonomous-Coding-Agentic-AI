@@ -16,6 +16,11 @@ from app.memory import (
     safe_resolve_task_memory_path,
 )
 from app.evaluation import sanitize_telemetry_dict, sanitize_telemetry_value
+from scripts.cleanup_scratch import clean_repository_root
+
+# Ensure repository root is clean of temporary scratch files
+clean_repository_root()
+
 
 
 # -----------------------------------------------------------------------------

@@ -1,0 +1,36 @@
+# Phase 16J — .dockerignore for Autonomous Coding Agent
+
+# Git & repository metadata
+.git
+.gitignore
+
+# Environment files & secrets
+.env
+.env.*
+*.env
+
+# Python virtual environments
+.venv
+venv
+ENV
+env
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Pytest, coverage & IDE artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.vscode/
+.idea/
+.mypy_cache/
+.ruff_cache/
+
+# Development logs & scratch directories
+*.log
+workspace_scratch/
+*.tmp

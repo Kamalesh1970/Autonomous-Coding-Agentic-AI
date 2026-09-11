@@ -1,27 +1,30 @@
-# Python caches
+# Python caches & build artifacts
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
-.agent_memory
+*.egg-info/
 
 # Environments
 .venv/
 venv/
 ENV/
 env/
-/home/kamalesh/Autonomous Coding Agentic AI/.agent_memory
-.agent_memory
-# IDE / Testing
+
+# Memory & temporary scratch directories
+.agent_memory/
+workspace_scratch/
+my-repo/
+
+# Logs & test artifacts
+*.log
 .pytest_cache/
 .coverage
 htmlcov/
 .vscode/
 .idea/
 
-# Environment files with secrets
+# Secrets
 .env
-
-# Temporary scratch directories
-workspace_scratch/
-/home/kamalesh/Autonomous Coding Agentic AI/.agent_memory
+.env.*
+*.env
