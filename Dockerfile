@@ -11,11 +11,13 @@ WORKDIR /app
 
 # Install dependencies
 COPY requirements.txt pyproject.toml /app/
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application source code and web static files
 COPY app/ /app/app/
 COPY web/ /app/web/
+COPY scripts/ /app/scripts/
 COPY README.md /app/
 
 # Create a non-root system user and set workspace directory permissions
