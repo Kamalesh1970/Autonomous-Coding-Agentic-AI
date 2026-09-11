@@ -1106,7 +1106,7 @@ def _validate_workspace(workspace_root: str) -> None:
     """Validate workspace_root before agent execution starts.
 
     Raises:
-        ValueError: With a clean, user-facing message if the workspace is invalid.
+        ValueError: With a clean, user-facing message if the workspace is invalid or unauthorized.
     """
     import pathlib
     ws = pathlib.Path(workspace_root)
@@ -1124,6 +1124,27 @@ def _validate_workspace(workspace_root: str) -> None:
             "Please provide a directory, not a file."
         )
 
+    # Enforce system directory boundary protection to reject root system paths
+    restricted_system_dirs = {
+        pathlib.Path("/"),
+        pathlib.Path("/etc"),
+        pathlib.Path("/proc"),
+        pathlib.Path("/sys"),
+        pathlib.Path("/dev"),
+        pathlib.Path("/boot"),
+        pathlib.Path("/root"),
+        pathlib.Path("/bin"),
+        pathlib.Path("/sbin"),
+        pathlib.Path("/lib"),
+        pathlib.Path("/lib64"),
+        pathlib.Path("/usr"),
+        pathlib.Path("/var"),
+    }
+    if abs_ws in restricted_system_dirs or (len(abs_ws.parts) >= 2 and abs_ws.parts[1] in ("etc", "proc", "sys", "dev", "boot", "root", "bin", "sbin")):
+        raise ValueError(
+            f"Invalid workspace: System directory '{abs_ws}' is restricted and cannot be used as an agent workspace root."
+        )
+
     try:
         list(abs_ws.iterdir())
     except PermissionError:
@@ -1131,6 +1152,7 @@ def _validate_workspace(workspace_root: str) -> None:
             f"Workspace directory is not readable: '{abs_ws}'. "
             "Please check directory permissions."
         )
+
 
 
 def main():

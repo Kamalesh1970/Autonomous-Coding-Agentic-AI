@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autonomous Coding Agent — Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="navbar">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div class="brand-text">
+          <h1>AUTONOMOUS CODING AGENT</h1>
+          <span class="badge badge-dev">PHASE 16I DASHBOARD</span>
+        </div>
+      </div>
+      <div class="system-status">
+        <span class="status-indicator active"></span>
+        <span id="health-status">System Ready</span>
+      </div>
+    </header>
+
+    <!-- Main Content Layout -->
+    <main class="dashboard-grid">
+
+      <!-- Left Column: Task Input Form & Recent History -->
+      <section class="left-panel">
+        
+        <!-- Task Submission Card -->
+        <div class="card glass-card">
+          <div class="card-header">
+            <h2>New Task</h2>
+            <span class="subtitle">Submit a goal for autonomous execution</span>
+          </div>
+
+          <form id="task-form">
+            <div class="form-group">
+              <label for="task-goal">Goal</label>
+              <textarea id="task-goal" name="goal" rows="4" placeholder="e.g. Fix failing tests in calculator module..." required></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="workspace-root">Workspace Path</label>
+              <input type="text" id="workspace-root" name="workspace_root" value="." placeholder="." required />
+            </div>
+
+            <button type="submit" id="run-btn" class="btn btn-primary">
+              <span class="btn-text">RUN AGENT</span>
+              <span class="spinner hidden"></span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Recent Tasks List Card -->
+        <div class="card glass-card margin-top">
+          <div class="card-header flex-between">
+            <h2>Recent Tasks</h2>
+            <button id="refresh-history-btn" class="btn btn-sm btn-secondary">Refresh</button>
+          </div>
+          
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Task ID</th>
+                  <th>Goal</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="recent-tasks-body">
+                <tr class="empty-row">
+                  <td colspan="3">No previous execution history found</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: Active Task & Execution Report -->
+      <section class="right-panel">
+
+        <!-- Active Task Card -->
+        <div class="card glass-card active-task-card">
+          <div class="card-header flex-between">
+            <h2>Active Task</h2>
+            <span id="active-status-badge" class="badge badge-idle">IDLE</span>
+          </div>
+
+          <div id="active-task-container">
+            <div class="empty-state">
+              <div class="empty-icon">🎯</div>
+              <p>No active execution. Submit a task above to run the agent.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Detailed Final Report Card -->
+        <div class="card glass-card margin-top hidden" id="final-report-card">
+          <div class="card-header flex-between">
+            <h2>Final Execution Report</h2>
+            <span id="report-outcome-badge" class="badge">UNKNOWN</span>
+          </div>
+
+          <div id="report-content" class="report-grid">
+            <!-- Dynamic Final Report Data -->
+          </div>
+
+          <div class="trace-section margin-top">
+            <h3>Sanitized Execution Trace</h3>
+            <div id="trace-timeline" class="trace-timeline">
+              <!-- Trace events -->
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>Autonomous Coding Agent &copy; 2026 | Safe Execution & Sandbox Boundary Preserved</p>
+    </footer>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
